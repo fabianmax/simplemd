@@ -209,7 +209,12 @@ logic is headless-testable, which this project weights heavily.
   mouse mid-drag.
 - **Viewport-scope syntax highlighting.** Whole-document highlighting of a
   code-heavy file costs seconds; one viewport costs <20 ms.
-- Expect a performance cliff around **10K+ lines** without viewport caching.
+- ~~Expect a performance cliff around 10K+ lines~~ **Spike-verified 2026-08-30**
+  (`docs/research/spike-results.md`): full live preview with block widgets and
+  naive full-document rebuilds passes at 50k lines / 2,434 fences in WKWebView
+  (typing sync p95 13 ms; paints within one frame at every size). Viewport
+  scoping is optimization headroom, not a prerequisite. markdown-it under JSC:
+  1.7 MB in 43 ms — render performance is a non-issue.
 
 ### Markdown rendering
 

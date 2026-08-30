@@ -88,6 +88,16 @@ export async function runSpike() {
   const posOf = (frac: number) => view.state.doc.line(Math.max(1, Math.floor(L * frac))).from;
   const phases: Record<string, unknown> = { config: cfg, lines: L, chars: text.length, initialRenderMs };
 
+  // Experiment 1.2: markdown-it full render in JSC (research numbers were V8)
+  {
+    const MarkdownIt = (await import("markdown-it")).default;
+    const m = new MarkdownIt({ html: false });
+    m.render(text); // warmup
+    const t = performance.now();
+    m.render(text);
+    phases.markdownItFullRenderMs = performance.now() - t;
+  }
+
   phases.typing = await measureTyping(view, [posOf(0.1), posOf(0.5), posOf(0.9)], 60);
   phases.cursorTravel = await measureCursorTravel(view, Math.floor(L * 0.4), 120);
   phases.scroll = await measureScroll(view, 40);
