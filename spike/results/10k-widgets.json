@@ -1,0 +1,41 @@
+{
+  "name": "10k-widgets",
+  "config": {
+    "corpus": "10k",
+    "mode": "widgets"
+  },
+  "lines": 10001,
+  "chars": 342401,
+  "initialRenderMs": 64.99999999999997,
+  "typing": {
+    "p50": 17,
+    "p95": 18,
+    "max": 19.000000000000114,
+    "n": 180
+  },
+  "cursorTravel": {
+    "latency": {
+      "p50": 17,
+      "p95": 18,
+      "max": 19,
+      "n": 120
+    },
+    "totalHeightDriftPx": 4014
+  },
+  "scroll": {
+    "latency": {
+      "p50": 33,
+      "p95": 34,
+      "max": 36,
+      "n": 41
+    },
+    "heightDrift": {
+      "p50": 0,
+      "p95": 0,
+      "max": 0,
+      "n": 41
+    }
+  },
+  "finishedAt": 1788118516451,
+  "peakRssMb": 115.3
+}

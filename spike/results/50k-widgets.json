@@ -1,0 +1,41 @@
+{
+  "name": "50k-widgets",
+  "config": {
+    "corpus": "50k",
+    "mode": "widgets"
+  },
+  "lines": 50001,
+  "chars": 1718173,
+  "initialRenderMs": 156,
+  "typing": {
+    "p50": 17,
+    "p95": 18,
+    "max": 23,
+    "n": 180
+  },
+  "cursorTravel": {
+    "latency": {
+      "p50": 17,
+      "p95": 18,
+      "max": 20.00000000000091,
+      "n": 120
+    },
+    "totalHeightDriftPx": 1932
+  },
+  "scroll": {
+    "latency": {
+      "p50": 33,
+      "p95": 35,
+      "max": 42,
+      "n": 41
+    },
+    "heightDrift": {
+      "p50": 0,
+      "p95": 0,
+      "max": 0,
+      "n": 41
+    }
+  },
+  "finishedAt": 1788118533808,
+  "peakRssMb": 115.7
+}

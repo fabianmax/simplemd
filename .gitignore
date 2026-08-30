@@ -24,3 +24,4 @@ pnpm-debug.log*
 src-tauri/target/
 yarn-debug.log*
 yarn-error.log*
+spike/corpus-*.md
