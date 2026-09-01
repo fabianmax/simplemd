@@ -181,3 +181,11 @@ describe("linkUrlAt — boundary clicks (the real-user miss)", async () => {
     expect(linkUrlAt(s, 1)).toBeNull();
   });
 });
+
+describe("link hover affordance", () => {
+  it("link spans carry the lp-link class in preview", () => {
+    const doc = "A [web link](https://example.com) end";
+    const s = stateAt(doc, doc.length - 1);
+    expect(decosIn(s, 2, 33)).toContain("lp-link");
+  });
+});

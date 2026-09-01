@@ -87,7 +87,7 @@ export class App {
       "mousedown",
       (e) => {
         linkCandidate = null;
-        if (!this.activeTab || e.button !== 0) return;
+        if (!this.activeTab || !this.previewOn || e.button !== 0) return;
         const pos = this.view.posAtCoords({ x: e.clientX, y: e.clientY });
         if (pos == null) return;
         const url = linkUrlAt(this.view.state, pos);

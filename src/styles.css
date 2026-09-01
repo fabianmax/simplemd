@@ -328,3 +328,7 @@ html, body, #app {
   pointer-events: none;
 }
 .status-bar[hidden] { display: none; }
+
+/* --- link hover affordance (v1.4.2) ------------------------------------------ */
+.lp-link { cursor: pointer; }
+.lp-link:hover { text-decoration: underline; text-underline-offset: 2px; }

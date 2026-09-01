@@ -13,6 +13,7 @@ import { revealedLines, setsEqual } from "./reveal";
 import { TableWidget, CheckboxWidget } from "./widgets";
 
 const hideMark = Decoration.mark({ class: "lp-hidden" });
+const linkMark = Decoration.mark({ class: "lp-link" });
 const fenceLine = Decoration.line({ class: "lp-fence-line" });
 const codeLine = Decoration.line({ class: "lp-code-line" });
 const quoteLine = Decoration.line({ class: "lp-quote-line" });
@@ -65,6 +66,13 @@ export function buildDecorations(state: EditorState): DecorationSet {
         case "Blockquote": {
           eachLine(node.from, node.to, quoteLine); // constant styling
           return undefined; // children (marks, emphasis) still processed
+        }
+        case "Link":
+        case "Autolink": {
+          // hover affordance: pointer cursor + underline (preview mode only —
+          // this decoration set doesn't exist in raw mode)
+          deco.push(linkMark.range(node.from, node.to));
+          return undefined;
         }
         case "HeaderMark": {
           const parent = node.node.parent;
