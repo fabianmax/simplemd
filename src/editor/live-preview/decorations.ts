@@ -141,15 +141,31 @@ const dragFreeze = ViewPlugin.define((view) => {
 
 // --- link opening ----------------------------------------------------------------
 
-/** URL of the Link/Autolink containing pos, or null. Pure — tested headless. */
+function insideLink(n: { name: string; parent: unknown } | null): boolean {
+  let cur = n as { name: string; parent: typeof cur | null } | null;
+  while (cur) {
+    if (cur.name === "Link" || cur.name === "URL" || cur.name === "Autolink") return true;
+    cur = cur.parent;
+  }
+  return false;
+}
+
+/** URL of the Link/Autolink containing pos, or null. Pure — tested headless.
+ *  Boundary-tolerant: a click on the very edge of a rendered link lands on
+ *  the hidden `[` marker (zero visual width), where side-0 resolution finds
+ *  nothing — try both sides before giving up. */
 export function linkUrlAt(state: EditorState, pos: number): string | null {
   const tree = ensureSyntaxTree(state, state.doc.length, 200);
   if (!tree) return null;
-  let n = tree.resolveInner(pos, 0);
+  let n = tree.resolveInner(pos, 1);
+  if (!insideLink(n)) n = tree.resolveInner(pos, -1);
+  if (!insideLink(n)) n = tree.resolveInner(pos, 0);
   while (n.parent && n.name !== "Link" && n.name !== "URL" && n.name !== "Autolink") {
     n = n.parent;
   }
   if (n.name === "Autolink") return state.doc.sliceString(n.from + 1, n.to - 1);
+  // (helper used above)
+
   const scope = n.name === "URL" ? (n.parent ?? n) : n;
   const urlNode = scope.name === "URL" ? scope : scope.getChild("URL");
   if (urlNode) return state.doc.sliceString(urlNode.from, urlNode.to);

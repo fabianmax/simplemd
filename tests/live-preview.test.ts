@@ -166,3 +166,18 @@ describe("linkUrlAt — reference-style links", async () => {
     expect(linkUrlAt(createEditorState(doc), 5)).toBeNull();
   });
 });
+
+describe("linkUrlAt — boundary clicks (the real-user miss)", async () => {
+  const { linkUrlAt } = await import("../src/editor/live-preview/decorations");
+  const doc = "A [web link](https://example.com) end";
+  const s = createEditorState(doc);
+  it("resolves at the opening bracket boundary (pos of '[')", () => {
+    expect(linkUrlAt(s, 2)).toBe("https://example.com");
+  });
+  it("resolves at the closing paren boundary", () => {
+    expect(linkUrlAt(s, 33)).toBe("https://example.com");
+  });
+  it("still null one char before the link", () => {
+    expect(linkUrlAt(s, 1)).toBeNull();
+  });
+});
