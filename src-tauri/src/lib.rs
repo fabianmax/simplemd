@@ -36,6 +36,7 @@ pub fn run() {
             commands::get_recents,
             commands::list_dir,
             commands::resolve_link,
+            commands::open_external,
             menu::show_format_menu,
             commands::frontend_log,
             commands::watch_file,

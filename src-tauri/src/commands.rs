@@ -107,6 +107,27 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     Ok(entries)
 }
 
+/// Open a web/mailto URL in the default handler, ACTIVATING it. The opener
+/// plugin's detached spawn opened tabs without ever bringing the browser
+/// forward — to the user that reads as "link does nothing" (found 4 silently
+/// accumulated tabs). /usr/bin/open activates the target app by default.
+#[tauri::command]
+pub fn open_external(url: String) -> Result<(), String> {
+    let allowed = ["http://", "https://", "mailto:"];
+    if !allowed.iter().any(|p| url.starts_with(p)) {
+        return Err(format!("scheme not allowed: {url}"));
+    }
+    let status = std::process::Command::new("/usr/bin/open")
+        .arg(&url)
+        .status()
+        .map_err(|e| e.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("open exited with {status}"))
+    }
+}
+
 #[derive(Serialize)]
 pub struct ResolvedLink {
     pub path: String,

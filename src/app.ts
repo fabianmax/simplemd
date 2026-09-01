@@ -147,7 +147,10 @@ export class App {
   private async openLink(url: string) {
     void ipc.log(`link click: ${url}`);
     if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !url.startsWith("file:")) {
-      await ipc.openExternal(url).catch((e) => void ipc.log(`openExternal failed: ${e}`));
+      await ipc.openExternal(url).then(
+        () => void ipc.log("openExternal resolved"),
+        (e) => void ipc.log(`openExternal FAILED: ${e}`),
+      );
       return;
     }
     const target = url.startsWith("file://") ? decodeURIComponent(url.slice(7)) : url;

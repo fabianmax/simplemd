@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog, save as saveDialog, ask } from "@tauri-apps/plugin-dialog";
-import { openUrl, openPath } from "@tauri-apps/plugin-opener";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 export interface FileContent {
   content: string;
@@ -37,7 +37,7 @@ export const onFileChanged = (cb: (path: string, hash: string) => void) =>
   );
 
 export const setTitle = (title: string) => getCurrentWindow().setTitle(title);
-export const openExternal = (url: string) => openUrl(url);
+export const openExternal = (url: string) => invoke<void>("open_external", { url });
 export const openWithDefaultApp = (path: string) => openPath(path);
 export interface ResolvedLink {
   path: string;
