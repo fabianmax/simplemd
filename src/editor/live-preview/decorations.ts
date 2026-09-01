@@ -140,36 +140,25 @@ const dragFreeze = ViewPlugin.define((view) => {
 });
 
 // --- link opening ----------------------------------------------------------------
-function linkClickHandler(openLink: (url: string) => void) {
-  return EditorView.domEventHandlers({
-    mousedown(e, view) {
-      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
-      if (pos == null) return false;
-      // Plain click follows a RENDERED link (chrome hidden). Once the line is
-      // revealed (cursor on it), plain clicks edit; ⌘-click always follows.
-      if (!e.metaKey) {
-        const line = view.state.doc.lineAt(pos).number;
-        if (revealedLines(view.state).has(line)) return false;
-      }
-      const tree = ensureSyntaxTree(view.state, pos, 50);
-      if (!tree) return false;
-      let n = tree.resolveInner(pos, 0);
-      while (n.parent && n.name !== "Link" && n.name !== "URL" && n.name !== "Autolink") {
-        n = n.parent;
-      }
-      const scope = n.name === "URL" ? n.parent ?? n : n;
-      const urlNode =
-        scope.name === "URL" ? scope : scope.getChild?.("URL") ?? null;
-      if (!urlNode) return false;
-      openLink(view.state.doc.sliceString(urlNode.from, urlNode.to));
-      e.preventDefault();
-      return true;
-    },
-  });
+
+/** URL of the Link/Autolink containing pos, or null. Pure — tested headless. */
+export function linkUrlAt(state: EditorState, pos: number): string | null {
+  const tree = ensureSyntaxTree(state, state.doc.length, 200);
+  if (!tree) return null;
+  let n = tree.resolveInner(pos, 0);
+  while (n.parent && n.name !== "Link" && n.name !== "URL" && n.name !== "Autolink") {
+    n = n.parent;
+  }
+  if (n.name === "Autolink") return state.doc.sliceString(n.from + 1, n.to - 1);
+  const scope = n.name === "URL" ? (n.parent ?? n) : n;
+  const urlNode = scope.name === "URL" ? scope : scope.getChild("URL");
+  if (!urlNode) return null;
+  return state.doc.sliceString(urlNode.from, urlNode.to);
 }
 
+
 // --- the extension ---------------------------------------------------------------
-export function livePreview(openLink: (url: string) => void = () => {}) {
+export function livePreview() {
   const field = StateField.define<DecorationSet>({
     create: buildDecorations,
     update(deco, tr) {
@@ -186,5 +175,5 @@ export function livePreview(openLink: (url: string) => void = () => {}) {
     },
     provide: (f) => EditorView.decorations.from(f),
   });
-  return [draggingField, dragFreeze, field, linkClickHandler(openLink)];
+  return [draggingField, dragFreeze, field];
 }

@@ -89,8 +89,12 @@ export class BrowserPanel {
     }
     for (const e of entries) {
       const row = document.createElement("div");
-      row.className = "browser-row " + (e.is_dir ? "browser-dir" : "browser-file");
-      row.style.paddingLeft = `${10 + depth * 14}px`;
+      const isMd = /\.(md|markdown)$/i.test(e.name);
+      row.className =
+        "browser-row " +
+        (e.is_dir ? "browser-dir" : isMd ? "browser-file browser-md" : "browser-file");
+      // files indent one extra step so they align past the folder chevron
+      row.style.paddingLeft = `${10 + depth * 14 + (e.is_dir ? 0 : 14)}px`;
       row.dataset.path = e.path;
       row.textContent = (e.is_dir ? "▸ " : "") + e.name;
       if (!e.is_dir && e.path === this.activeFile) row.classList.add("browser-active");

@@ -124,3 +124,25 @@ describe("byte-identity invariant (THE standing test)", () => {
     expect(undone.doc.toString()).toBe(sink);
   });
 });
+
+describe("linkUrlAt (click-to-follow resolution)", async () => {
+  const { linkUrlAt } = await import("../src/editor/live-preview/decorations");
+  const doc = "A [web link](https://example.com) and <https://auto.link> here.";
+  const s = createEditorState(doc);
+  it("resolves inside the link text", () => {
+    expect(linkUrlAt(s, doc.indexOf("web") + 1)).toBe("https://example.com");
+  });
+  it("resolves inside the URL part", () => {
+    expect(linkUrlAt(s, doc.indexOf("example"))).toBe("https://example.com");
+  });
+  it("resolves autolinks", () => {
+    expect(linkUrlAt(s, doc.indexOf("auto"))).toBe("https://auto.link");
+  });
+  it("null on plain text", () => {
+    expect(linkUrlAt(s, doc.length - 2)).toBeNull();
+  });
+  it("resolves relative file links", () => {
+    const d2 = "see [spec](./sub/nested.md) now";
+    expect(linkUrlAt(createEditorState(d2), 6)).toBe("./sub/nested.md");
+  });
+});

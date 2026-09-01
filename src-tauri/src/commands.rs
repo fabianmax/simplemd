@@ -91,7 +91,11 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
             if name.starts_with('.') {
                 return None;
             }
-            let is_dir = e.file_type().ok()?.is_dir();
+            let ft = e.file_type().ok()?;
+            if ft.is_symlink() {
+                return None; // no aliases/symlinks in the browser (user feedback)
+            }
+            let is_dir = ft.is_dir();
             Some(DirEntry {
                 name,
                 path: e.path().to_string_lossy().into_owned(),
@@ -276,6 +280,7 @@ mod tests {
         fs::write(dir.join("b-plan.md"), "x").unwrap();
         fs::write(dir.join("code.rs"), "x").unwrap();
         fs::write(dir.join(".hidden.md"), "x").unwrap();
+        std::os::unix::fs::symlink(dir.join("b-plan.md"), dir.join("alias.md")).unwrap();
         let got = list_dir(dir.to_string_lossy().into_owned()).unwrap();
         let names: Vec<_> = got.iter().map(|e| e.name.as_str()).collect();
         // dirs first, then ALL files case-insensitively sorted; dotfiles hidden
