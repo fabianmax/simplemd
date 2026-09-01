@@ -161,3 +161,53 @@ html, body, #app {
   opacity: 0.5;
 }
 .tab-close:hover { opacity: 1; background: var(--band); }
+
+/* --- quick switcher ---------------------------------------------------------- */
+.switcher {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 10vh;
+}
+.switcher[hidden] { display: none; }
+.switcher-box {
+  width: min(520px, 86vw);
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+.switcher-box input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 15px;
+  background: transparent;
+  color: var(--fg);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.switcher-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 14px;
+  font-size: 13.5px;
+  cursor: default;
+}
+.switcher-row .switcher-hint {
+  color: var(--fg-dim);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+.switcher-selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }

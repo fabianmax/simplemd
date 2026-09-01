@@ -137,6 +137,11 @@ pub fn load_recents(app: &AppHandle) -> Vec<String> {
 }
 
 #[tauri::command]
+pub fn get_recents(app: AppHandle) -> Vec<String> {
+    load_recents(&app)
+}
+
+#[tauri::command]
 pub fn add_recent(app: AppHandle, path: String) -> Result<(), String> {
     let mut recents = load_recents(&app);
     recents.retain(|p| p != &path);

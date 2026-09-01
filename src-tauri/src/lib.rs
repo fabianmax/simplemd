@@ -33,6 +33,7 @@ pub fn run() {
             commands::read_file,
             commands::save_file,
             commands::add_recent,
+            commands::get_recents,
             commands::watch_file,
             commands::unwatch_file,
             commands::write_recovery,

@@ -8,6 +8,7 @@ import { fromDisk, toDisk, type Eol } from "./fileio";
 import { classifyChange, nearestHeadingAbove } from "./sync";
 import * as ipc from "./ipc";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { SwitcherUI } from "./switcher-ui";
 
 export interface Tab {
   path: string;
@@ -27,6 +28,7 @@ export class App {
   private conflictBar: HTMLElement;
   private emptyState: HTMLElement;
   private tabStrip: HTMLElement;
+  private switcher: SwitcherUI;
 
   constructor(parent: HTMLElement) {
     this.tabStrip = document.createElement("div");
@@ -43,6 +45,26 @@ export class App {
     editorHost.className = "editor-host";
     parent.appendChild(editorHost);
     this.view = new EditorView({ state: this.makeState(""), parent: editorHost });
+    this.switcher = new SwitcherUI(
+      parent,
+      (item) => {
+        if (item.tabIndex >= 0 && this.tabs[item.tabIndex]?.path === item.path) {
+          this.switchTo(item.tabIndex);
+        } else {
+          void this.openPath(item.path);
+        }
+      },
+      () => this.view.focus(),
+    );
+  }
+
+  private async openSwitcher() {
+    const open = this.tabs.map((t, i) => ({ path: t.path, tabIndex: i }));
+    const openPaths = new Set(open.map((o) => o.path));
+    const recents = (await ipc.getRecents())
+      .filter((p) => !openPaths.has(p))
+      .map((p) => ({ path: p, tabIndex: -1 }));
+    this.switcher.open([...open, ...recents]);
   }
 
   // --- editor state plumbing --------------------------------------------------
@@ -105,6 +127,8 @@ export class App {
       await this.closeTab(this.active);
     } else if (id === "toggle-preview") {
       this.togglePreview();
+    } else if (id === "quick-switch") {
+      await this.openSwitcher();
     } else if (id.startsWith("recent:")) {
       await this.openPath(id.slice("recent:".length));
     }

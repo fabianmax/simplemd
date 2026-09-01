@@ -54,6 +54,12 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
 
     let view_menu = SubmenuBuilder::new(app, "View")
         .item(
+            &MenuItemBuilder::new("Quick Switch…")
+                .id("quick-switch")
+                .accelerator("CmdOrCtrl+P")
+                .build(app)?,
+        )
+        .item(
             &MenuItemBuilder::new("Toggle Raw Source")
                 .id("toggle-preview")
                 .accelerator("CmdOrCtrl+E")

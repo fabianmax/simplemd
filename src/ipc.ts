@@ -15,6 +15,7 @@ export const readFile = (path: string) => invoke<FileContent>("read_file", { pat
 export const saveFile = (path: string, content: string) =>
   invoke<string>("save_file", { path, content });
 export const addRecent = (path: string) => invoke<void>("add_recent", { path });
+export const getRecents = () => invoke<string[]>("get_recents");
 export const takePendingOpen = () => invoke<string[]>("take_pending_open");
 export const watchFile = (path: string) => invoke<void>("watch_file", { path });
 export const unwatchFile = (path: string) => invoke<void>("unwatch_file", { path });
