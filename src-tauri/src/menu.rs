@@ -90,6 +90,12 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
 
     let view_menu = SubmenuBuilder::new(app, "View")
         .item(
+            &MenuItemBuilder::new("Toggle File Browser")
+                .id("toggle-browser")
+                .accelerator("CmdOrCtrl+Shift+B")
+                .build(app)?,
+        )
+        .item(
             &MenuItemBuilder::new("Quick Switch…")
                 .id("quick-switch")
                 .accelerator("CmdOrCtrl+P")

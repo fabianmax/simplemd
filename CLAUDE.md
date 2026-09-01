@@ -310,9 +310,13 @@ word-level diff. Baseline snapshots on focus-loss (window blur / tab switch),
 external reloads highlight added words + deletion carets as view-only
 decorations, scroll-to-first-change, floating pill with count + ↑/↓ + dismiss
 (dismiss = new baseline). Own saves reset the baseline. 69 vitest + 8 cargo.
-User feedback 2026-09-01: diff highlights work but are "visually not 100%
-appealing" — a styling polish pass is owed (colors, deletion carets, pill).
-Next: v1.3 file browser + signing/notarization/Homebrew cask.
+**v1.3**: file browser (⌘⇧B) — lazy per-level listing, no index/vault.
+Signing/notarization/Homebrew cask deferred by user decision 2026-09-01
+until a GitHub repo exists; app runs unsigned locally meanwhile.
+
+Open polish debt: diff visuals (user: "not 100% appealing" — colors,
+deletion carets, pill), app icon, DMG (needs Finder-automation permission
+or the non-styled path).
 
 ## How we build this: agentic-first
 
