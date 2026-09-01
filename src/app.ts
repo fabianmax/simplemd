@@ -1,7 +1,7 @@
 /** App state: one window, one file (v1). Owns the open/save/dirty lifecycle
  *  and the agent-loop reload path (silent reload, conflict bar, recovery). */
 import { EditorView } from "codemirror";
-import { createEditorState } from "./editor/setup";
+import { createEditorState, previewCompartment, previewExtension } from "./editor/setup";
 import { fromDisk, toDisk, type Eol } from "./fileio";
 import { classifyChange, nearestHeadingAbove } from "./sync";
 import * as ipc from "./ipc";
@@ -14,6 +14,7 @@ export class App {
    *  events carrying this hash are echoes of our own writes. */
   diskHash: string | null = null;
   dirty = false;
+  private previewOn = true;
   private reloading = false;
   private conflictBar: HTMLElement;
 
@@ -23,7 +24,7 @@ export class App {
     editorHost.className = "editor-host";
     parent.appendChild(editorHost);
     this.view = new EditorView({
-      state: createEditorState("", [this.dirtyTracker()]),
+      state: this.makeState(""),
       parent: editorHost,
     });
   }
@@ -60,7 +61,7 @@ export class App {
     } else if (id.startsWith("recent:")) {
       await this.openPath(id.slice("recent:".length));
     }
-    // "toggle-preview" lands in v1c.
+    else if (id === "toggle-preview") this.togglePreview();
   }
 
   async openPath(path: string): Promise<boolean> {
@@ -82,8 +83,27 @@ export class App {
     return true;
   }
 
+  private makeState(text: string) {
+    return createEditorState(text, [this.dirtyTracker()], {
+      preview: this.previewOn,
+      openLink: (url) => void ipc.openExternal(url),
+    });
+  }
+
   private setDocument(text: string) {
-    this.view.setState(createEditorState(text, [this.dirtyTracker()]));
+    this.view.setState(this.makeState(text));
+  }
+
+  togglePreview() {
+    this.previewOn = !this.previewOn;
+    this.view.dispatch({
+      effects: previewCompartment.reconfigure(
+        this.previewOn
+          ? previewExtension((url) => void ipc.openExternal(url))
+          : [],
+      ),
+    });
+    this.view.focus();
   }
 
   async save() {

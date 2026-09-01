@@ -1,0 +1,126 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { EditorSelection, EditorState } from "@codemirror/state";
+import { createEditorState } from "../src/editor/setup";
+import { revealedLines } from "../src/editor/live-preview/reveal";
+import { buildDecorations } from "../src/editor/live-preview/decorations";
+import { toggleTaskSpec } from "../src/editor/live-preview/checkbox";
+
+const sink = readFileSync(new URL("./fixtures/kitchen-sink.md", import.meta.url), "utf8");
+
+const stateAt = (doc: string, anchor = 0) =>
+  createEditorState(doc, [], { preview: true }).update({
+    selection: EditorSelection.cursor(anchor),
+  }).state;
+
+/** Collect decoration class names / widget types between from..to. */
+function decosIn(state: EditorState, from: number, to: number) {
+  const found: string[] = [];
+  buildDecorations(state).between(from, to, (_f, _t, deco) => {
+    const spec = deco.spec;
+    found.push(spec.class ?? spec.widget?.constructor?.name ?? "replace");
+  });
+  return found;
+}
+
+describe("reveal predicate", () => {
+  it("reveals exactly the cursor line", () => {
+    const s = stateAt("# a\ntext\n# b", 5); // cursor on line 2
+    expect([...revealedLines(s)]).toEqual([2]);
+  });
+  it("reveals every line a selection spans", () => {
+    const s = createEditorState("a\nb\nc\nd", [], {}).update({
+      selection: EditorSelection.single(0, 6),
+    }).state;
+    expect([...revealedLines(s)].sort()).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe("decorations", () => {
+  it("hides heading marker when cursor is elsewhere", () => {
+    const s = stateAt("# Head\n\ntext", 10);
+    expect(decosIn(s, 0, 2)).toContain("lp-hidden");
+  });
+  it("shows heading marker when cursor is on the line", () => {
+    const s = stateAt("# Head\n\ntext", 2);
+    expect(decosIn(s, 0, 2)).not.toContain("lp-hidden");
+  });
+  it("replaces an untouched table with a widget", () => {
+    const doc = "text\n\n| a | b |\n|---|---|\n| 1 | 2 |\n";
+    const s = stateAt(doc, 0);
+    expect(decosIn(s, 6, doc.length)).toContain("TableWidget");
+  });
+  it("reveals table source when cursor is inside it", () => {
+    const doc = "text\n\n| a | b |\n|---|---|\n| 1 | 2 |\n";
+    const s = stateAt(doc, 8); // inside table
+    expect(decosIn(s, 6, doc.length)).not.toContain("TableWidget");
+  });
+  it("task markers become checkbox widgets", () => {
+    const doc = "- [ ] task\n\nelsewhere";
+    const s = stateAt(doc, doc.length - 1);
+    expect(decosIn(s, 0, 10)).toContain("CheckboxWidget");
+  });
+  it("fence lines get constant styling regardless of cursor", () => {
+    const doc = "```ts\nconst x = 1;\n```\n";
+    const away = stateAt(doc + "\ntext", doc.length + 3);
+    const inside = stateAt(doc + "\ntext", 8);
+    for (const s of [away, inside]) {
+      const classes = decosIn(s, 0, doc.length);
+      expect(classes).toContain("lp-code-line");
+      expect(classes).toContain("lp-fence-line");
+    }
+  });
+  it("hides inline-code marks but never fence marks via lp-hidden", () => {
+    const doc = "`x`\n\n```\ny\n```\n\ncursor here";
+    const s = stateAt(doc, doc.length - 1);
+    expect(decosIn(s, 0, 3)).toContain("lp-hidden");
+    expect(decosIn(s, 5, 14)).not.toContain("lp-hidden");
+  });
+});
+
+describe("checkbox toggle (Obsidian cursor-jump regression guard)", () => {
+  it("toggles [ ] -> [x] and back, same length", () => {
+    const s = stateAt("- [ ] task", 9);
+    const spec = toggleTaskSpec(s, 2, 5)!;
+    const next = s.update(spec).state;
+    expect(next.doc.toString()).toBe("- [x] task");
+    const spec2 = toggleTaskSpec(next, 2, 5)!;
+    expect(next.update(spec2).state.doc.toString()).toBe("- [ ] task");
+  });
+  it("preserves the selection exactly", () => {
+    const s = stateAt("- [ ] task with cursor later", 20);
+    const next = s.update(toggleTaskSpec(s, 2, 5)!).state;
+    expect(next.selection.main.head).toBe(20);
+  });
+  it("refuses to toggle non-marker text", () => {
+    const s = stateAt("- [ ] task", 0);
+    expect(toggleTaskSpec(s, 0, 3)).toBeNull();
+  });
+});
+
+describe("byte-identity invariant (THE standing test)", () => {
+  const cases: Record<string, string> = {
+    "kitchen sink fixture": sink,
+    "no trailing newline": "# x\ntext",
+    "unicode + emoji": "# ünïcødé 🎯\n\n- [ ] tâsk\n",
+    "windows-style content (pre-normalized)": "# a\n\nb\n",
+    "reference links": "[a][1]\n\n[1]: https://e.com\n",
+    "deeply nested": "> - [ ] **`x`** *[l](https://e.com)*\n",
+  };
+  for (const [name, doc] of Object.entries(cases)) {
+    it(`${name}: decorated state returns source byte-for-byte`, () => {
+      const s = createEditorState(doc, [], { preview: true });
+      buildDecorations(s); // force the full decoration pass
+      expect(s.doc.toString()).toBe(doc);
+    });
+  }
+
+  it("survives an edit cycle with decorations active", () => {
+    const s = createEditorState(sink, [], { preview: true });
+    const mid = Math.floor(sink.length / 2);
+    const edited = s.update({ changes: { from: mid, insert: "XYZ" } }).state;
+    buildDecorations(edited);
+    const undone = edited.update({ changes: { from: mid, to: mid + 3 } }).state;
+    expect(undone.doc.toString()).toBe(sink);
+  });
+});

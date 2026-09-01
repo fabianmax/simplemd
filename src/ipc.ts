@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog, ask } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 export interface FileContent {
   content: string;
@@ -26,6 +27,7 @@ export const onFileChanged = (cb: (hash: string) => void) =>
   listen<string>("file-changed", (e) => cb(e.payload));
 
 export const setTitle = (title: string) => getCurrentWindow().setTitle(title);
+export const openExternal = (url: string) => openUrl(url);
 
 export async function pickMarkdownFile(): Promise<string | null> {
   const picked = await openDialog({

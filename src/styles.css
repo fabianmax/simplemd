@@ -1,14 +1,32 @@
 :root {
   color-scheme: light dark;
   --bg: #ffffff;
-  --fg: #1a1a1a;
+  --fg: #1d1d1f;
+  --fg-dim: #86868b;
+  --accent: #0969da;
+  --band: rgba(0, 0, 0, 0.045);
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --syn-keyword: #cf222e;
+  --syn-string: #0a3069;
+  --syn-number: #0550ae;
+  --syn-fn: #8250df;
+  --syn-type: #953800;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #1e1e1e;
     --fg: #d4d4d4;
+    --fg-dim: #8b8b8b;
+    --accent: #4da3ff;
+    --band: rgba(255, 255, 255, 0.055);
+    --syn-keyword: #ff7b72;
+    --syn-string: #a5d6ff;
+    --syn-number: #79c0ff;
+    --syn-fn: #d2a8ff;
+    --syn-type: #ffa657;
   }
 }
+
 html, body, #app {
   margin: 0;
   height: 100%;
@@ -20,7 +38,46 @@ html, body, #app {
 #app { display: flex; flex-direction: column; }
 .editor-host { flex: 1; min-height: 0; }
 .editor-host .cm-editor { height: 100%; }
+.cm-editor.cm-focused { outline: none; }
+.cm-editor .cm-content {
+  padding: 24px 0 40vh;
+  max-width: 76ch;
+  margin: 0 auto;
+  caret-color: var(--fg);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.cm-editor .cm-line { padding: 0 24px; }
+.cm-editor .cm-cursor { border-left-color: var(--fg); }
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
 
+/* --- live preview ------------------------------------------------------- */
+/* marker hiding: font-size trick, NEVER display:none (breaks cursor placement) */
+.lp-hidden { font-size: 0.01em; opacity: 0; }
+
+/* constant (reveal-independent) line styling — heights never shift */
+.lp-code-line { background: var(--band); font-family: var(--mono); font-size: 0.92em; }
+.lp-fence-line { color: var(--fg-dim); }
+.lp-quote-line {
+  border-left: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.lp-checkbox { cursor: pointer; color: var(--accent); }
+.lp-checkbox.lp-checked { color: var(--fg-dim); }
+
+.lp-table { padding: 2px 0; }
+.lp-table table { border-collapse: collapse; font-size: 0.95em; }
+.lp-table th, .lp-table td {
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  padding: 3px 10px;
+  text-align: left;
+}
+.lp-table th { background: var(--band); }
+
+/* --- conflict bar (non-modal) -------------------------------------------- */
 .conflict-bar {
   display: flex;
   gap: 10px;
