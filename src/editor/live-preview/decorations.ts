@@ -152,8 +152,38 @@ export function linkUrlAt(state: EditorState, pos: number): string | null {
   if (n.name === "Autolink") return state.doc.sliceString(n.from + 1, n.to - 1);
   const scope = n.name === "URL" ? (n.parent ?? n) : n;
   const urlNode = scope.name === "URL" ? scope : scope.getChild("URL");
-  if (!urlNode) return null;
-  return state.doc.sliceString(urlNode.from, urlNode.to);
+  if (urlNode) return state.doc.sliceString(urlNode.from, urlNode.to);
+  // Reference-style link [text][label] / collapsed [label]: resolve the label
+  // against the document's LinkReference definitions. (lezer, by design, does
+  // not validate references — see CLAUDE.md.)
+  if (scope.name !== "Link") return null;
+  const labels = scope.getChildren("LinkLabel");
+  const label = labels.length
+    ? state.doc.sliceString(labels[labels.length - 1].from + 1, labels[labels.length - 1].to - 1)
+    : (() => {
+        const marks = scope.getChildren("LinkMark");
+        return marks.length >= 2
+          ? state.doc.sliceString(marks[0].to, marks[1].from)
+          : null;
+      })();
+  if (!label) return null;
+  const refTree = ensureSyntaxTree(state, state.doc.length, 200);
+  let found: string | null = null;
+  refTree?.iterate({
+    enter(node) {
+      if (found || node.name !== "LinkReference") return found ? false : undefined;
+      const lab = node.node.getChild("LinkLabel");
+      const url = node.node.getChild("URL");
+      if (lab && url) {
+        const labText = state.doc.sliceString(lab.from + 1, lab.to - 1);
+        if (labText.toLowerCase() === label.toLowerCase()) {
+          found = state.doc.sliceString(url.from, url.to);
+        }
+      }
+      return undefined;
+    },
+  });
+  return found;
 }
 
 

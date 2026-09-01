@@ -146,3 +146,23 @@ describe("linkUrlAt (click-to-follow resolution)", async () => {
     expect(linkUrlAt(createEditorState(d2), 6)).toBe("./sub/nested.md");
   });
 });
+
+describe("linkUrlAt — reference-style links", async () => {
+  const { linkUrlAt } = await import("../src/editor/live-preview/decorations");
+  it("resolves [text][label]", () => {
+    const doc = "see [the spec][1] here\n\n[1]: https://spec.example.com\n";
+    expect(linkUrlAt(createEditorState(doc), 6)).toBe("https://spec.example.com");
+  });
+  it("resolves collapsed [label]", () => {
+    const doc = "see [spec] here\n\n[spec]: https://s.example.com\n";
+    expect(linkUrlAt(createEditorState(doc), 6)).toBe("https://s.example.com");
+  });
+  it("case-insensitive label match", () => {
+    const doc = "see [X][Ref] end\n\n[ref]: https://r.example.com\n";
+    expect(linkUrlAt(createEditorState(doc), 5)).toBe("https://r.example.com");
+  });
+  it("null for undefined reference", () => {
+    const doc = "see [x][nope] end\n";
+    expect(linkUrlAt(createEditorState(doc), 5)).toBeNull();
+  });
+});
