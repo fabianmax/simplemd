@@ -5,6 +5,7 @@ import { createEditorState, previewCompartment, previewExtension } from "./edito
 import { fromDisk, toDisk, type Eol } from "./fileio";
 import { classifyChange, nearestHeadingAbove } from "./sync";
 import * as ipc from "./ipc";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 export class App {
   view: EditorView;
@@ -17,9 +18,15 @@ export class App {
   private previewOn = true;
   private reloading = false;
   private conflictBar: HTMLElement;
+  private emptyState: HTMLElement;
 
   constructor(parent: HTMLElement) {
     this.conflictBar = this.buildConflictBar(parent);
+    this.emptyState = document.createElement("div");
+    this.emptyState.className = "empty-state";
+    this.emptyState.innerHTML =
+      "<div><h2>simplemd</h2><p>Drop a Markdown file here, or press <kbd>⌘O</kbd></p></div>";
+    parent.appendChild(this.emptyState);
     const editorHost = document.createElement("div");
     editorHost.className = "editor-host";
     parent.appendChild(editorHost);
@@ -42,6 +49,12 @@ export class App {
     await ipc.onMenu((id) => this.handleMenu(id));
     await ipc.onOpenRequest(() => this.drainPending());
     await ipc.onFileChanged((hash) => this.handleFileChanged(hash));
+    await getCurrentWebview().onDragDropEvent((e) => {
+      if (e.payload.type === "drop") {
+        const md = e.payload.paths.find((p) => /\.(md|markdown)$/i.test(p));
+        if (md) void this.openPath(md);
+      }
+    });
     await this.drainPending();
     this.updateTitle();
   }
@@ -76,6 +89,7 @@ export class App {
     this.hideConflict();
     this.setDocument(text);
     this.dirty = false;
+    this.emptyState.hidden = true;
     this.updateTitle();
     this.view.focus();
     void ipc.addRecent(path);

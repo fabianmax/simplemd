@@ -97,3 +97,26 @@ html, body, #app {
   color: var(--fg);
   cursor: pointer;
 }
+
+/* --- empty state ----------------------------------------------------------- */
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--fg-dim);
+  background: var(--bg);
+  z-index: 5;
+  pointer-events: none;
+}
+.empty-state[hidden] { display: none; }
+.empty-state kbd {
+  font-family: var(--mono);
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.85em;
+}
+#app { position: relative; }

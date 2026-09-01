@@ -195,6 +195,13 @@ logic is headless-testable, which this project weights heavily.
 
 **Live-preview rules, each one earned from a documented bug:**
 
+- **Fenced code renders in place, never as widgets** (decided from spike data,
+  v1c): in-place beats widgets on both axes (sync p95 8 ms vs 13 ms at 50k
+  lines; 0 px vs ~2-4k px cursor-travel height drift) and is better product —
+  code stays directly editable with nested-language highlighting, matching the
+  code-centric positioning. Widgets are reserved for tables (raw pipe syntax is
+  unreadable). GFM requires `base: markdownLanguage` explicitly — the
+  `markdown()` default is commonmark-only, silently dropping tables/task lists.
 - **Reveal raw source per *line*, not per block.** A 40-line fenced block or a
   wide table is one block; revealing it wholesale is a huge visual jump. Per-line
   also kills the layout-shift bug class. Invariant to hold: *every line has a
@@ -292,6 +299,15 @@ the focus jumps between Typora windows."*
   (BBEdit's cask is the template).
 - App Store review has historically rejected exactly this CLI feature
   (Guideline 2.3); Panic removed Transmit's "Open In Terminal" at Apple's request.
+
+## Status (2026-09-01)
+
+**v1 core loop shipped**: open (CLI `open -a` / Finder / dialog / recents /
+drag-drop) → live-preview edit → ⌘S atomic save → silent external reload
+without focus steal → conflict bar + recovery sidecar → dark mode. Release
+bundle: 11 MB. 37 vitest + 8 cargo tests. Next per roadmap: v1.1 tabs +
+formatting hotkeys, v1.2 "since I last looked" diff, v1.3 file browser +
+signing/notarization/Homebrew cask.
 
 ## How we build this: agentic-first
 

@@ -1,5 +1,0 @@
-/* marker hiding: font-size trick, NEVER display:none (breaks cursor placement) */
-.sp-hide-markers .cm-formatting, .sp-hide-markers .tok-processingInstruction { font-size: 0.01em; opacity: 0; }
-.sp-fence { background: color-mix(in srgb, currentColor 8%, transparent); padding: 8px 12px; border-radius: 6px; margin: 0; font-family: ui-monospace, monospace; font-size: 0.9em; }
-.sp-table table { border-collapse: collapse; }
-.sp-table td, .sp-table th { border: 1px solid color-mix(in srgb, currentColor 25%, transparent); padding: 2px 8px; }
