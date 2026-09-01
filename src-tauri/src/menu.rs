@@ -7,7 +7,8 @@
 //! where CM6 handles them. Cut/Copy/Paste ARE included: their selectors route
 //! into the webview correctly and CM6 handles the resulting DOM events.
 
-use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{ContextMenu, Menu, MenuItemBuilder, SubmenuBuilder};
+use tauri::Manager;
 use tauri::{AppHandle, Emitter, Wry};
 
 pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
@@ -88,7 +89,14 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
     }
     let format_menu = fmt.build()?;
 
-    let view_menu = SubmenuBuilder::new(app, "View")
+    let mut view_builder = SubmenuBuilder::new(app, "View");
+    #[cfg(debug_assertions)]
+    {
+        view_builder = view_builder.item(
+            &MenuItemBuilder::new("Open DevTools").id("devtools").build(app)?,
+        );
+    }
+    let view_menu = view_builder
         .item(
             &MenuItemBuilder::new("Toggle File Browser")
                 .id("toggle-browser")
@@ -112,6 +120,33 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
     Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &format_menu, &view_menu])
 }
 
+/// Right-click context menu in the editor: the common formatting commands.
+/// Items reuse the fmt: ids, so events flow through the same "menu" channel.
+#[tauri::command]
+pub fn show_format_menu(window: tauri::WebviewWindow) -> Result<(), String> {
+    let app = window.app_handle();
+    let build = || -> tauri::Result<Menu<Wry>> {
+        let mut b = SubmenuBuilder::new(app, "ctx");
+        for (label, id) in [
+            ("Bold", "fmt:bold"),
+            ("Italic", "fmt:italic"),
+            ("Strikethrough", "fmt:strike"),
+            ("Inline Code", "fmt:code"),
+            ("Link", "fmt:link"),
+        ] {
+            b = b.item(&MenuItemBuilder::new(label).id(id).build(app)?);
+        }
+        let sub = b.build()?;
+        let menu = Menu::new(app)?;
+        for item in sub.items()? {
+            menu.append(&item)?;
+        }
+        Ok(menu)
+    };
+    let menu = build().map_err(|e| e.to_string())?;
+    menu.popup(window.as_ref().window()).map_err(|e| e.to_string())
+}
+
 pub fn rebuild(app: &AppHandle, recents: &[String]) -> tauri::Result<()> {
     app.set_menu(build(app, recents)?)?;
     Ok(())
@@ -119,6 +154,13 @@ pub fn rebuild(app: &AppHandle, recents: &[String]) -> tauri::Result<()> {
 
 pub fn attach_handler(app: &AppHandle) {
     app.on_menu_event(|app, event| {
+        #[cfg(debug_assertions)]
+        if event.id().as_ref() == "devtools" {
+            if let Some(w) = app.get_webview_window("main") {
+                w.open_devtools();
+            }
+            return;
+        }
         let _ = app.emit("menu", event.id().as_ref());
     });
 }

@@ -140,31 +140,55 @@ const dragFreeze = ViewPlugin.define((view) => {
 });
 
 // --- link opening ----------------------------------------------------------------
-function linkClickHandler(openLink: (url: string) => void) {
-  return EditorView.domEventHandlers({
-    mousedown(e, view) {
-      if (!e.metaKey) return false;
-      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
-      if (pos == null) return false;
-      const tree = ensureSyntaxTree(view.state, pos, 50);
-      if (!tree) return false;
-      let n = tree.resolveInner(pos, 0);
-      while (n.parent && n.name !== "Link" && n.name !== "URL" && n.name !== "Autolink") {
-        n = n.parent;
+
+/** URL of the Link/Autolink containing pos, or null. Pure — tested headless. */
+export function linkUrlAt(state: EditorState, pos: number): string | null {
+  const tree = ensureSyntaxTree(state, state.doc.length, 200);
+  if (!tree) return null;
+  let n = tree.resolveInner(pos, 0);
+  while (n.parent && n.name !== "Link" && n.name !== "URL" && n.name !== "Autolink") {
+    n = n.parent;
+  }
+  if (n.name === "Autolink") return state.doc.sliceString(n.from + 1, n.to - 1);
+  const scope = n.name === "URL" ? (n.parent ?? n) : n;
+  const urlNode = scope.name === "URL" ? scope : scope.getChild("URL");
+  if (urlNode) return state.doc.sliceString(urlNode.from, urlNode.to);
+  // Reference-style link [text][label] / collapsed [label]: resolve the label
+  // against the document's LinkReference definitions. (lezer, by design, does
+  // not validate references — see CLAUDE.md.)
+  if (scope.name !== "Link") return null;
+  const labels = scope.getChildren("LinkLabel");
+  const label = labels.length
+    ? state.doc.sliceString(labels[labels.length - 1].from + 1, labels[labels.length - 1].to - 1)
+    : (() => {
+        const marks = scope.getChildren("LinkMark");
+        return marks.length >= 2
+          ? state.doc.sliceString(marks[0].to, marks[1].from)
+          : null;
+      })();
+  if (!label) return null;
+  const refTree = ensureSyntaxTree(state, state.doc.length, 200);
+  let found: string | null = null;
+  refTree?.iterate({
+    enter(node) {
+      if (found || node.name !== "LinkReference") return found ? false : undefined;
+      const lab = node.node.getChild("LinkLabel");
+      const url = node.node.getChild("URL");
+      if (lab && url) {
+        const labText = state.doc.sliceString(lab.from + 1, lab.to - 1);
+        if (labText.toLowerCase() === label.toLowerCase()) {
+          found = state.doc.sliceString(url.from, url.to);
+        }
       }
-      const scope = n.name === "URL" ? n.parent ?? n : n;
-      const urlNode =
-        scope.name === "URL" ? scope : scope.getChild?.("URL") ?? null;
-      if (!urlNode) return false;
-      openLink(view.state.doc.sliceString(urlNode.from, urlNode.to));
-      e.preventDefault();
-      return true;
+      return undefined;
     },
   });
+  return found;
 }
 
+
 // --- the extension ---------------------------------------------------------------
-export function livePreview(openLink: (url: string) => void = () => {}) {
+export function livePreview() {
   const field = StateField.define<DecorationSet>({
     create: buildDecorations,
     update(deco, tr) {
@@ -181,5 +205,5 @@ export function livePreview(openLink: (url: string) => void = () => {}) {
     },
     provide: (f) => EditorView.decorations.from(f),
   });
-  return [draggingField, dragFreeze, field, linkClickHandler(openLink)];
+  return [draggingField, dragFreeze, field];
 }

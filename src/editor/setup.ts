@@ -13,11 +13,10 @@ export const previewCompartment = new Compartment();
 
 export interface EditorOptions {
   preview?: boolean;
-  openLink?: (url: string) => void;
 }
 
-export function previewExtension(openLink?: (url: string) => void): Extension {
-  return livePreview(openLink);
+export function previewExtension(): Extension {
+  return livePreview();
 }
 
 /** Build the editor state separately from the view so tests can run headless in Node.
@@ -39,7 +38,7 @@ export function createEditorState(
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
-      previewCompartment.of(preview ? previewExtension(opts.openLink) : []),
+      previewCompartment.of(preview ? previewExtension() : []),
       ...extra,
     ],
   });

@@ -14,6 +14,9 @@ export interface DiffResult {
   removed: { pos: number; text: string }[];
   /** offset of the first change in the current text, if any */
   firstChange: number | null;
+  /** word totals for the +N / −M pill */
+  addedWords: number;
+  removedWords: number;
 }
 
 /** Guard: above this size, skip word diffing (O(n²) worst case) and fall back
@@ -21,9 +24,10 @@ export interface DiffResult {
 export const WORD_DIFF_LIMIT = 1_000_000;
 
 export function computeDiff(baseline: string, current: string): DiffResult {
-  if (baseline === current) return { added: [], removed: [], firstChange: null };
+  const empty = { added: [], removed: [], firstChange: null, addedWords: 0, removedWords: 0 };
+  if (baseline === current) return empty;
   if (baseline.length > WORD_DIFF_LIMIT || current.length > WORD_DIFF_LIMIT) {
-    return { added: [], removed: [], firstChange: firstDifference(baseline, current) };
+    return { ...empty, firstChange: firstDifference(baseline, current) };
   }
   const parts = diffWordsWithSpace(baseline, current);
   const added: { from: number; to: number }[] = [];
@@ -55,10 +59,13 @@ export function computeDiff(baseline: string, current: string): DiffResult {
     ...filtered.map((r) => r.pos),
     ...removed.filter((r) => !filtered.includes(r)).map((r) => r.pos),
   ];
+  const words = (t: string) => t.split(/\s+/).filter(Boolean).length;
   return {
     added,
     removed: filtered,
     firstChange: firsts.length ? Math.min(...firsts) : firstDifference(baseline, current),
+    addedWords: added.reduce((n, a) => n + words(current.slice(a.from, a.to)), 0),
+    removedWords: removed.reduce((n, r) => n + words(r.text), 0),
   };
 }
 

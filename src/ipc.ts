@@ -3,8 +3,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open as openDialog, ask } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { open as openDialog, save as saveDialog, ask } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 export interface FileContent {
   content: string;
@@ -37,7 +37,17 @@ export const onFileChanged = (cb: (path: string, hash: string) => void) =>
   );
 
 export const setTitle = (title: string) => getCurrentWindow().setTitle(title);
-export const openExternal = (url: string) => openUrl(url);
+export const openExternal = (url: string) => invoke<void>("open_external", { url });
+export const openWithDefaultApp = (path: string) => openPath(path);
+export interface ResolvedLink {
+  path: string;
+  exists: boolean;
+  is_md: boolean;
+}
+export const resolveLink = (baseDir: string, target: string) =>
+  invoke<ResolvedLink>("resolve_link", { baseDir, target });
+export const showFormatMenu = () => invoke<void>("show_format_menu");
+export const log = (msg: string) => invoke<void>("frontend_log", { msg }).catch(() => {});
 
 export async function pickMarkdownFile(): Promise<string | null> {
   const picked = await openDialog({
@@ -45,6 +55,14 @@ export async function pickMarkdownFile(): Promise<string | null> {
     filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
   });
   return typeof picked === "string" ? picked : null;
+}
+
+export async function pickSavePath(): Promise<string | null> {
+  const picked = await saveDialog({
+    defaultPath: "Untitled.md",
+    filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
+  });
+  return picked ?? null;
 }
 
 export async function pickFolder(): Promise<string | null> {
