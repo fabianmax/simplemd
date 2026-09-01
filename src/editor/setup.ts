@@ -5,6 +5,7 @@ import { languages } from "@codemirror/language-data";
 import { history, historyKeymap, defaultKeymap } from "@codemirror/commands";
 import { keymap } from "@codemirror/view";
 import { livePreview } from "./live-preview/decorations";
+import { diffField } from "./diff-decorations";
 import { markdownHighlight } from "./highlight";
 
 /** Live-preview extensions live in a compartment so ⌘E can swap them out. */
@@ -34,6 +35,7 @@ export function createEditorState(
       // The default base is commonmark-only — GFM must be explicit.
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       markdownHighlight,
+      diffField,
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
