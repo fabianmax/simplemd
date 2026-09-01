@@ -12,6 +12,7 @@ import { formatCommands } from "./editor/format";
 import * as ipc from "./ipc";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { SwitcherUI } from "./switcher-ui";
+import { docStats, formatStats } from "./stats";
 import { BrowserPanel } from "./browser";
 
 export interface Tab {
@@ -38,6 +39,8 @@ export class App {
   private tabStrip: HTMLElement;
   private switcher: SwitcherUI;
   private diffPill: HTMLElement;
+  private statusBar: HTMLElement;
+  private statsTimer: ReturnType<typeof setTimeout> | null = null;
   private browser: BrowserPanel;
   private diffCount: HTMLElement;
   private diffNav = 0;
@@ -56,11 +59,28 @@ export class App {
     const mainRow = document.createElement("div");
     mainRow.className = "main-row";
     parent.appendChild(mainRow);
-    this.browser = new BrowserPanel(mainRow, (path) => void this.openPath(path));
+    this.browser = new BrowserPanel(mainRow, (path) => void this.openAnyPath(path));
     const editorHost = document.createElement("div");
     editorHost.className = "editor-host";
     mainRow.appendChild(editorHost);
     ({ pill: this.diffPill, count: this.diffCount } = this.buildDiffPill(parent));
+    this.statusBar = document.createElement("div");
+    this.statusBar.className = "status-bar";
+    this.statusBar.hidden = true;
+    parent.appendChild(this.statusBar);
+    // Empty tab-strip area double-click opens a new tab (user feedback).
+    this.tabStrip.ondblclick = (e) => {
+      if (e.target === this.tabStrip) void this.handleMenu("open");
+    };
+    // Suppress the webview's default context menu everywhere — its "Reload"
+    // wipes all tab state (reported as 'reload closes the tab'). Inside the
+    // editor, show the native formatting menu instead.
+    document.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      if (editorHost.contains(e.target as Node) && this.activeTab) {
+        void ipc.showFormatMenu();
+      }
+    });
     this.view = new EditorView({ state: this.makeState(""), parent: editorHost });
     this.switcher = new SwitcherUI(
       parent,
@@ -89,18 +109,52 @@ export class App {
   private makeState(text: string) {
     return createEditorState(text, [this.dirtyTracker()], {
       preview: this.previewOn,
-      openLink: (url) => void ipc.openExternal(url),
+      openLink: (url) => void this.openLink(url),
     });
+  }
+
+  /** Link routing (user feedback): http(s)/mailto -> external browser;
+   *  relative/absolute paths resolve against the file's directory —
+   *  markdown opens as a tab, anything else opens with its default app. */
+  private async openLink(url: string) {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !url.startsWith("file:")) {
+      void ipc.openExternal(url);
+      return;
+    }
+    const target = url.startsWith("file://") ? decodeURIComponent(url.slice(7)) : url;
+    const baseDir = this.activeTab?.path.replace(/\/[^/]+$/, "") ?? "/";
+    const clean = target.replace(/[#?].*$/, ""); // strip anchors/queries
+    if (!clean) return;
+    const r = await ipc.resolveLink(baseDir, clean);
+    if (!r.exists) return;
+    if (r.is_md) await this.openPath(r.path);
+    else void ipc.openWithDefaultApp(r.path);
+  }
+
+  /** Browser rows use the same routing minus URL handling. */
+  private async openAnyPath(path: string) {
+    if (/\.(md|markdown)$/i.test(path)) await this.openPath(path);
+    else void ipc.openWithDefaultApp(path);
   }
 
   private dirtyTracker() {
     return EditorView.updateListener.of((u) => {
       const tab = this.tabs[this.active];
+      if (u.docChanged) {
+        if (this.statsTimer) clearTimeout(this.statsTimer);
+        this.statsTimer = setTimeout(() => this.renderStats(), 300);
+      }
       if (u.docChanged && !this.reloading && tab && !tab.dirty) {
         tab.dirty = true;
         this.renderChrome();
       }
     });
+  }
+
+  private renderStats() {
+    const tab = this.activeTab;
+    this.statusBar.hidden = !tab;
+    if (tab) this.statusBar.textContent = formatStats(docStats(this.view.state.doc.toString()));
   }
 
   togglePreview() {
@@ -446,8 +500,13 @@ export class App {
           (i === this.active ? " tab-active" : "") +
           (t.conflict ? " tab-conflict" : "");
         const name = document.createElement("span");
-        name.textContent = `${t.dirty ? "• " : ""}${fileName(t.path)}`;
+        name.textContent = fileName(t.path);
         name.title = t.path;
+        if (t.dirty) {
+          const dot = document.createElement("span");
+          dot.className = "tab-dot";
+          el.appendChild(dot);
+        }
         const close = document.createElement("button");
         close.className = "tab-close";
         close.textContent = "×";
@@ -467,9 +526,18 @@ export class App {
 
     const changes = tab?.diff ? changeCount(tab.diff) : 0;
     this.diffPill.hidden = changes === 0;
-    if (changes > 0) {
-      this.diffCount.textContent = `${changes} change${changes === 1 ? "" : "s"} since you last looked`;
+    if (changes > 0 && tab?.diff) {
+      this.diffCount.replaceChildren();
+      const plus = document.createElement("span");
+      plus.className = "diff-plus";
+      plus.textContent = `+${tab.diff.addedWords}`;
+      const minus = document.createElement("span");
+      minus.className = "diff-minus";
+      minus.textContent = `−${tab.diff.removedWords}`;
+      this.diffCount.append(plus, minus);
+      this.diffCount.title = "words changed since you last looked";
     }
+    this.renderStats();
 
     const title = tab ? `${tab.dirty ? "• " : ""}${fileName(tab.path)} — simplemd` : "simplemd";
     void ipc.setTitle(title);

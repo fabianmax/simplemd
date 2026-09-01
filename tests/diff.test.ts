@@ -10,6 +10,13 @@ describe("computeDiff — word level", () => {
     expect(addedText).toContain("atomic");
     expect(addedText).toContain("any");
     expect(addedText).not.toContain("watcher"); // unchanged words unmarked
+    expect(d.addedWords).toBe(2);
+  });
+
+  it("word counts feed the +N / −M pill", () => {
+    const d = computeDiff("alpha beta gamma", "alpha delta");
+    expect(d.addedWords).toBeGreaterThan(0);
+    expect(d.removedWords).toBeGreaterThan(0);
   });
 
   it("reports pure deletions with position and text", () => {

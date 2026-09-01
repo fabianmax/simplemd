@@ -73,8 +73,9 @@ pub struct DirEntry {
 }
 
 /// One directory level, lazily fetched per expand. A browser, NOT an index
-/// (CLAUDE.md): no recursion, no cache, no vault. Shows subdirectories and
-/// markdown files; hides dotfiles.
+/// (CLAUDE.md): no recursion, no cache, no vault. Shows ALL files except
+/// dotfiles (user feedback 2026-09-01); non-markdown files open with the
+/// system default app.
 #[tauri::command]
 pub fn frontend_log(msg: String) {
     eprintln!("[frontend] {msg}");
@@ -91,12 +92,6 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
                 return None;
             }
             let is_dir = e.file_type().ok()?.is_dir();
-            let is_md = name.rsplit('.').next().map_or(false, |ext| {
-                ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown")
-            });
-            if !is_dir && !is_md {
-                return None;
-            }
             Some(DirEntry {
                 name,
                 path: e.path().to_string_lossy().into_owned(),
@@ -106,6 +101,35 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
         .collect();
     entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
     Ok(entries)
+}
+
+#[derive(Serialize)]
+pub struct ResolvedLink {
+    pub path: String,
+    pub exists: bool,
+    pub is_md: bool,
+}
+
+/// Resolve a non-URL link target ([spec](./spec.md), /abs/path, sub/file.txt)
+/// against the directory of the file containing it.
+#[tauri::command]
+pub fn resolve_link(base_dir: String, target: String) -> ResolvedLink {
+    // minimal %-decoding for the common case of spaces in filenames
+    let target = target.replace("%20", " ");
+    let raw = if target.starts_with('/') {
+        PathBuf::from(&target)
+    } else {
+        Path::new(&base_dir).join(&target)
+    };
+    let path = raw.canonicalize().unwrap_or(raw);
+    let is_md = path.extension().map_or(false, |e| {
+        e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown")
+    });
+    ResolvedLink {
+        exists: path.exists(),
+        is_md,
+        path: path.to_string_lossy().into_owned(),
+    }
 }
 
 // --- file watching --------------------------------------------------------
@@ -246,18 +270,31 @@ mod tests {
     }
 
     #[test]
-    fn list_dir_filters_and_sorts() {
+    fn list_dir_shows_all_files_hides_dotfiles() {
         let dir = tempdir();
         fs::create_dir_all(dir.join("zsub")).unwrap();
         fs::write(dir.join("b-plan.md"), "x").unwrap();
-        fs::write(dir.join("A-notes.MD"), "x").unwrap();
         fs::write(dir.join("code.rs"), "x").unwrap();
         fs::write(dir.join(".hidden.md"), "x").unwrap();
         let got = list_dir(dir.to_string_lossy().into_owned()).unwrap();
         let names: Vec<_> = got.iter().map(|e| e.name.as_str()).collect();
-        // dirs first, then md files case-insensitively sorted; .rs and dotfiles gone
-        assert_eq!(names, vec!["zsub", "A-notes.MD", "b-plan.md"]);
+        // dirs first, then ALL files case-insensitively sorted; dotfiles hidden
+        assert_eq!(names, vec!["zsub", "b-plan.md", "code.rs"]);
         assert!(got[0].is_dir);
+    }
+
+    #[test]
+    fn resolve_link_relative_and_markdown_detection() {
+        let dir = tempdir();
+        fs::write(dir.join("spec.md"), "x").unwrap();
+        fs::write(dir.join("data.csv"), "x").unwrap();
+        let base = dir.to_string_lossy().into_owned();
+        let md = resolve_link(base.clone(), "./spec.md".into());
+        assert!(md.exists && md.is_md);
+        let csv = resolve_link(base.clone(), "data.csv".into());
+        assert!(csv.exists && !csv.is_md);
+        let gone = resolve_link(base, "missing.md".into());
+        assert!(!gone.exists);
     }
 
     #[test]

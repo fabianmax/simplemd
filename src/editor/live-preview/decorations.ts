@@ -143,9 +143,14 @@ const dragFreeze = ViewPlugin.define((view) => {
 function linkClickHandler(openLink: (url: string) => void) {
   return EditorView.domEventHandlers({
     mousedown(e, view) {
-      if (!e.metaKey) return false;
       const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
       if (pos == null) return false;
+      // Plain click follows a RENDERED link (chrome hidden). Once the line is
+      // revealed (cursor on it), plain clicks edit; ⌘-click always follows.
+      if (!e.metaKey) {
+        const line = view.state.doc.lineAt(pos).number;
+        if (revealedLines(view.state).has(line)) return false;
+      }
       const tree = ensureSyntaxTree(view.state, pos, 50);
       if (!tree) return false;
       let n = tree.resolveInner(pos, 0);

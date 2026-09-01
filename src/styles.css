@@ -293,3 +293,34 @@ html, body, #app {
 .browser-row:hover { background: var(--band); }
 .browser-active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .browser-hint { padding: 12px; color: var(--fg-dim); }
+
+/* --- v1.4 feedback: tabs, pill, status bar --------------------------------- */
+.tab {
+  border-radius: 7px 7px 0 0;
+  border-top: none;
+  margin-top: 3px;
+}
+.tab-active { border-top: none; }
+.tab-conflict { box-shadow: inset 0 2px 0 #e5a50a; }
+.tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+.diff-plus { color: #2da44e; font-family: var(--mono); font-weight: 600; }
+.diff-minus { color: #d1242f; font-family: var(--mono); font-weight: 600; margin-left: 4px; }
+.status-bar {
+  position: absolute;
+  left: 12px;
+  bottom: 8px;
+  z-index: 10;
+  font-size: 11px;
+  color: var(--fg-dim);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.status-bar[hidden] { display: none; }
