@@ -2,10 +2,12 @@
  *  switch — the CM6 pattern). Owns open/save/dirty and the agent-loop reload
  *  path (silent reload, per-tab conflicts, recovery sidecars). */
 import { EditorView } from "codemirror";
-import { EditorSelection, type EditorState } from "@codemirror/state";
+import { EditorSelection, type EditorState, type StateEffect } from "@codemirror/state";
 import { createEditorState, previewCompartment, previewExtension } from "./editor/setup";
 import { fromDisk, toDisk, type Eol } from "./fileio";
 import { classifyChange, nearestHeadingAbove } from "./sync";
+import { computeDiff, changeAnchors, changeCount, type DiffResult } from "./diff";
+import { setDiff, clearDiff } from "./editor/diff-decorations";
 import { formatCommands } from "./editor/format";
 import * as ipc from "./ipc";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -18,6 +20,10 @@ export interface Tab {
   diskHash: string;
   dirty: boolean;
   conflict: boolean; // conflict pending; bar shows when tab becomes active
+  /** what the user last SAW (snapshotted on focus-loss) — the diff baseline */
+  baseline: string;
+  /** external changes vs baseline, shown as highlights until dismissed */
+  diff: DiffResult | null;
 }
 
 export class App {
@@ -30,6 +36,9 @@ export class App {
   private emptyState: HTMLElement;
   private tabStrip: HTMLElement;
   private switcher: SwitcherUI;
+  private diffPill: HTMLElement;
+  private diffCount: HTMLElement;
+  private diffNav = 0;
 
   constructor(parent: HTMLElement) {
     this.tabStrip = document.createElement("div");
@@ -45,6 +54,7 @@ export class App {
     const editorHost = document.createElement("div");
     editorHost.className = "editor-host";
     parent.appendChild(editorHost);
+    ({ pill: this.diffPill, count: this.diffCount } = this.buildDiffPill(parent));
     this.view = new EditorView({ state: this.makeState(""), parent: editorHost });
     this.switcher = new SwitcherUI(
       parent,
@@ -110,6 +120,11 @@ export class App {
         }
       }
     });
+    // Snapshot the baseline whenever the user looks away from the window.
+    window.addEventListener("blur", () => {
+      const tab = this.activeTab;
+      if (tab && !tab.diff) tab.baseline = this.view.state.doc.toString();
+    });
     await this.drainPending();
     this.renderChrome();
   }
@@ -154,6 +169,8 @@ export class App {
       diskHash: hash,
       dirty: false,
       conflict: false,
+      baseline: text,
+      diff: null,
     };
     this.tabs.push(tab);
     this.switchTo(this.tabs.length - 1);
@@ -165,15 +182,28 @@ export class App {
     if (index < 0 || index >= this.tabs.length) return;
     this.stashActive();
     this.active = index;
-    this.view.setState(this.tabs[index].state);
+    const tab = this.tabs[index];
+    this.view.setState(tab.state);
+    if (tab.diff && changeCount(tab.diff) > 0) {
+      this.diffNav = 0;
+      const effects: StateEffect<unknown>[] = [setDiff.of(tab.diff)];
+      if (tab.diff.firstChange != null) {
+        effects.push(EditorView.scrollIntoView(
+          Math.min(tab.diff.firstChange, this.view.state.doc.length), { y: "center" }));
+      }
+      this.view.dispatch({ effects });
+    }
     this.renderChrome();
     this.view.focus();
   }
 
-  /** Persist the live view state back into the active tab before switching away. */
+  /** Persist the live view state back into the active tab before switching
+   *  away — and snapshot the diff baseline: this is "I last looked here". */
   private stashActive() {
     const tab = this.tabs[this.active];
-    if (tab) tab.state = this.view.state;
+    if (!tab) return;
+    tab.state = this.view.state;
+    if (!tab.diff) tab.baseline = this.view.state.doc.toString();
   }
 
   async closeTab(index: number) {
@@ -209,6 +239,10 @@ export class App {
     tab.diskHash = await ipc.saveFile(tab.path, toDisk(text, tab.eol));
     tab.dirty = false;
     tab.conflict = false;
+    // The user authored this content — it becomes the new baseline.
+    tab.baseline = text;
+    tab.diff = null;
+    this.view.dispatch({ effects: clearDiff.of(null) });
     this.renderChrome();
   }
 
@@ -256,13 +290,24 @@ export class App {
     ).number;
     const anchor = nearestHeadingAbove((n) => prev.doc.line(n).text, topLine);
 
+    // "Since I last looked": diff the new disk content against the baseline.
+    tab.diff = computeDiff(tab.baseline, text);
+    this.diffNav = 0;
+
     this.reloading = true;
     try {
       this.view.dispatch({ changes: { from: 0, to: prev.doc.length, insert: text } });
       const doc = this.view.state.doc;
       const line = doc.line(Math.min(cursorLine, doc.lines));
-      const effects = [];
-      if (anchor) {
+      const effects: StateEffect<unknown>[] = [];
+      if (changeCount(tab.diff) > 0) {
+        effects.push(setDiff.of(tab.diff));
+        if (tab.diff.firstChange != null) {
+          // Scroll to the first change — the cheapest high-value feature found.
+          effects.push(EditorView.scrollIntoView(
+            Math.min(tab.diff.firstChange, doc.length), { y: "center" }));
+        }
+      } else if (anchor) {
         for (let ln = 1; ln <= doc.lines; ln++) {
           if (doc.line(ln).text === anchor.text) {
             effects.push(EditorView.scrollIntoView(doc.line(ln).from, { y: "start" }));
@@ -291,7 +336,52 @@ export class App {
     tab.diskHash = hash;
     tab.dirty = false;
     tab.conflict = false;
+    // Diff vs the user's last look; applied when the tab is activated.
+    tab.diff = computeDiff(tab.baseline, text);
     this.renderChrome();
+  }
+
+  // --- diff pill ------------------------------------------------------------------
+
+  private buildDiffPill(parent: HTMLElement) {
+    const pill = document.createElement("div");
+    pill.className = "diff-pill";
+    pill.hidden = true;
+    const count = document.createElement("span");
+    const prev = document.createElement("button");
+    prev.textContent = "▲";
+    prev.onclick = () => this.navigateDiff(-1);
+    const next = document.createElement("button");
+    next.textContent = "▼";
+    next.onclick = () => this.navigateDiff(1);
+    const dismiss = document.createElement("button");
+    dismiss.textContent = "✕";
+    dismiss.title = "Mark as seen";
+    dismiss.onclick = () => this.dismissDiff();
+    pill.append(count, prev, next, dismiss);
+    parent.appendChild(pill);
+    return { pill, count };
+  }
+
+  private navigateDiff(dir: 1 | -1) {
+    const tab = this.activeTab;
+    if (!tab?.diff) return;
+    const anchors = changeAnchors(tab.diff);
+    if (anchors.length === 0) return;
+    this.diffNav = (this.diffNav + dir + anchors.length) % anchors.length;
+    const pos = Math.min(anchors[this.diffNav], this.view.state.doc.length);
+    this.view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: "center" }) });
+    this.view.focus();
+  }
+
+  private dismissDiff() {
+    const tab = this.activeTab;
+    if (!tab) return;
+    tab.baseline = this.view.state.doc.toString();
+    tab.diff = null;
+    this.view.dispatch({ effects: clearDiff.of(null) });
+    this.renderChrome();
+    this.view.focus();
   }
 
   // --- conflict bar (non-modal; acts on the active tab) ------------------------------
@@ -364,6 +454,12 @@ export class App {
         return el;
       }),
     );
+
+    const changes = tab?.diff ? changeCount(tab.diff) : 0;
+    this.diffPill.hidden = changes === 0;
+    if (changes > 0) {
+      this.diffCount.textContent = `${changes} change${changes === 1 ? "" : "s"} since you last looked`;
+    }
 
     const title = tab ? `${tab.dirty ? "• " : ""}${fileName(tab.path)} — simplemd` : "simplemd";
     void ipc.setTitle(title);

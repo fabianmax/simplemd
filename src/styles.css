@@ -211,3 +211,43 @@ html, body, #app {
   max-width: 55%;
 }
 .switcher-selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+/* --- "since I last looked" diff ------------------------------------------------ */
+.lp-diff-added {
+  background: color-mix(in srgb, #2da44e 22%, transparent);
+  border-radius: 2px;
+}
+.lp-diff-removed {
+  color: #d1242f;
+  text-decoration: line-through;
+  opacity: 0.75;
+  font-size: 0.9em;
+  padding: 0 2px;
+  user-select: none;
+}
+.diff-pill {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, #2da44e 45%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.diff-pill[hidden] { display: none; }
+.diff-pill button {
+  border: none;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.diff-pill button:hover { background: var(--band); }
