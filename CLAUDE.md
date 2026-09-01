@@ -302,12 +302,11 @@ the focus jumps between Typora windows."*
 
 ## Status (2026-09-01)
 
-**v1 core loop shipped**: open (CLI `open -a` / Finder / dialog / recents /
-drag-drop) → live-preview edit → ⌘S atomic save → silent external reload
-without focus steal → conflict bar + recovery sidecar → dark mode. Release
-bundle: 11 MB. 37 vitest + 8 cargo tests. Next per roadmap: v1.1 tabs +
-formatting hotkeys, v1.2 "since I last looked" diff, v1.3 file browser +
-signing/notarization/Homebrew cask.
+**v1.1 shipped** (on top of the v1 core loop): tabs with per-tab watches and
+background-tab silent reload, ⌘P fuzzy quick-switch (open tabs + recents),
+formatting menu/hotkeys (⌘B/I/K, ⌘0-6 headings, lists/task/fence/table).
+62 vitest + 8 cargo tests. Next per roadmap: v1.2 "since I last looked"
+word-level diff, v1.3 file browser + signing/notarization/Homebrew cask.
 
 ## How we build this: agentic-first
 
