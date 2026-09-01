@@ -17,14 +17,17 @@ export const saveFile = (path: string, content: string) =>
 export const addRecent = (path: string) => invoke<void>("add_recent", { path });
 export const takePendingOpen = () => invoke<string[]>("take_pending_open");
 export const watchFile = (path: string) => invoke<void>("watch_file", { path });
+export const unwatchFile = (path: string) => invoke<void>("unwatch_file", { path });
 export const writeRecovery = (fileName: string, content: string) =>
   invoke<string>("write_recovery", { fileName, content });
 
 export const onMenu = (cb: (id: string) => void) =>
   listen<string>("menu", (e) => cb(e.payload));
 export const onOpenRequest = (cb: () => void) => listen("open-request", () => cb());
-export const onFileChanged = (cb: (hash: string) => void) =>
-  listen<string>("file-changed", (e) => cb(e.payload));
+export const onFileChanged = (cb: (path: string, hash: string) => void) =>
+  listen<{ path: string; hash: string }>("file-changed", (e) =>
+    cb(e.payload.path, e.payload.hash),
+  );
 
 export const setTitle = (title: string) => getCurrentWindow().setTitle(title);
 export const openExternal = (url: string) => openUrl(url);

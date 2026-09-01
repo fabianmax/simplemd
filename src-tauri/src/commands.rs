@@ -65,9 +65,15 @@ pub fn save_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<String> {
 
 // --- file watching --------------------------------------------------------
 
-/// The single active watch (v1: one file). Replacing it drops the old
-/// watcher, which unwinds its debounce thread and forwarding thread.
-pub struct ActiveWatch(pub Mutex<Option<notify::RecommendedWatcher>>);
+/// Active watches, one per open tab. Dropping a guard unwinds its
+/// debounce thread and forwarding thread.
+pub struct ActiveWatch(pub Mutex<std::collections::HashMap<String, notify::RecommendedWatcher>>);
+
+#[derive(Clone, Serialize)]
+pub struct FileChanged {
+    pub path: String,
+    pub hash: String,
+}
 
 #[tauri::command]
 pub fn watch_file(
@@ -75,16 +81,25 @@ pub fn watch_file(
     state: State<ActiveWatch>,
     path: String,
 ) -> Result<(), String> {
+    let mut watches = state.0.lock().unwrap();
+    if watches.contains_key(&path) {
+        return Ok(());
+    }
     let fw = crate::watcher::watch_file(PathBuf::from(&path), Duration::from_millis(120))
         .map_err(|e| e.to_string())?;
-    *state.0.lock().unwrap() = Some(fw.guard);
+    watches.insert(path.clone(), fw.guard);
     let changes = fw.changes;
     std::thread::spawn(move || {
         while let Ok(h) = changes.recv() {
-            let _ = app.emit("file-changed", hex(h));
+            let _ = app.emit("file-changed", FileChanged { path: path.clone(), hash: hex(h) });
         }
     });
     Ok(())
+}
+
+#[tauri::command]
+pub fn unwatch_file(state: State<ActiveWatch>, path: String) {
+    state.0.lock().unwrap().remove(&path);
 }
 
 /// Sidecar recovery copy — written the moment a conflict is detected,

@@ -7,7 +7,7 @@
 //! where CM6 handles them. Cut/Copy/Paste ARE included: their selectors route
 //! into the webview correctly and CM6 handles the resulting DOM events.
 
-use tauri::menu::{Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Wry};
 
 pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
@@ -36,12 +36,14 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
     let recent = recent_builder.build()?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&MenuItemBuilder::new("New Tab").id("new-tab").accelerator("CmdOrCtrl+T").build(app)?)
         .item(&MenuItemBuilder::new("Open…").id("open").accelerator("CmdOrCtrl+O").build(app)?)
         .item(&recent)
         .separator()
         .item(&MenuItemBuilder::new("Save").id("save").accelerator("CmdOrCtrl+S").build(app)?)
         .separator()
-        .item(&PredefinedMenuItem::close_window(app, None)?)
+        // ⌘W closes the TAB (close_window predefined would take the accelerator).
+        .item(&MenuItemBuilder::new("Close Tab").id("close-tab").accelerator("CmdOrCtrl+W").build(app)?)
         .build()?;
 
     let edit_menu = SubmenuBuilder::new(app, "Edit")
