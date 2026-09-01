@@ -305,11 +305,13 @@ the focus jumps between Typora windows."*
 **v1.1 shipped** (on top of the v1 core loop): tabs with per-tab watches and
 background-tab silent reload, ⌘P fuzzy quick-switch (open tabs + recents),
 formatting menu/hotkeys (⌘B/I/K, ⌘0-6 headings, lists/task/fence/table).
-**v1.2 (branch `v1.2-diff`)**: the differentiator — "since I last looked"
+**v1.2 merged**: the differentiator — "since I last looked"
 word-level diff. Baseline snapshots on focus-loss (window blur / tab switch),
 external reloads highlight added words + deletion carets as view-only
 decorations, scroll-to-first-change, floating pill with count + ↑/↓ + dismiss
 (dismiss = new baseline). Own saves reset the baseline. 69 vitest + 8 cargo.
+User feedback 2026-09-01: diff highlights work but are "visually not 100%
+appealing" — a styling polish pass is owed (colors, deletion carets, pill).
 Next: v1.3 file browser + signing/notarization/Homebrew cask.
 
 ## How we build this: agentic-first
