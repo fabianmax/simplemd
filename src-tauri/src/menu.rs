@@ -52,6 +52,42 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
         .paste()
         .build()?;
 
+    let mut fmt = SubmenuBuilder::new(app, "Format");
+    let items: &[(&str, &str, Option<&str>)] = &[
+        ("Bold", "fmt:bold", Some("CmdOrCtrl+B")),
+        ("Italic", "fmt:italic", Some("CmdOrCtrl+I")),
+        ("Strikethrough", "fmt:strike", None),
+        ("Inline Code", "fmt:code", Some("CmdOrCtrl+Shift+C")),
+        ("Link", "fmt:link", Some("CmdOrCtrl+K")),
+    ];
+    for (label, id, accel) in items {
+        let mut b = MenuItemBuilder::new(*label).id(*id);
+        if let Some(a) = accel {
+            b = b.accelerator(a);
+        }
+        fmt = fmt.item(&b.build(app)?);
+    }
+    fmt = fmt.separator();
+    for level in 0..=6u8 {
+        let label = if level == 0 { "Paragraph".to_string() } else { format!("Heading {level}") };
+        fmt = fmt.item(
+            &MenuItemBuilder::new(label)
+                .id(format!("fmt:h{level}"))
+                .accelerator(format!("CmdOrCtrl+{level}"))
+                .build(app)?,
+        );
+    }
+    fmt = fmt.separator();
+    for (label, id) in [
+        ("Bullet List", "fmt:list"),
+        ("Task List", "fmt:task"),
+        ("Code Fence", "fmt:fence"),
+        ("Table", "fmt:table"),
+    ] {
+        fmt = fmt.item(&MenuItemBuilder::new(label).id(id).build(app)?);
+    }
+    let format_menu = fmt.build()?;
+
     let view_menu = SubmenuBuilder::new(app, "View")
         .item(
             &MenuItemBuilder::new("Quick Switch…")
@@ -67,7 +103,7 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
         )
         .build()?;
 
-    Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &view_menu])
+    Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &format_menu, &view_menu])
 }
 
 pub fn rebuild(app: &AppHandle, recents: &[String]) -> tauri::Result<()> {

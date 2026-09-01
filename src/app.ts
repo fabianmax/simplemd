@@ -6,6 +6,7 @@ import { EditorSelection, type EditorState } from "@codemirror/state";
 import { createEditorState, previewCompartment, previewExtension } from "./editor/setup";
 import { fromDisk, toDisk, type Eol } from "./fileio";
 import { classifyChange, nearestHeadingAbove } from "./sync";
+import { formatCommands } from "./editor/format";
 import * as ipc from "./ipc";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { SwitcherUI } from "./switcher-ui";
@@ -131,6 +132,8 @@ export class App {
       await this.openSwitcher();
     } else if (id.startsWith("recent:")) {
       await this.openPath(id.slice("recent:".length));
+    } else if (id.startsWith("fmt:")) {
+      if (this.activeTab) formatCommands[id]?.(this.view);
     }
   }
 
