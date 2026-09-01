@@ -18,8 +18,9 @@ use notify::{Event, RecursiveMode, Watcher};
 pub struct FileWatch {
     /// Receives the new content hash each time the watched file's content changes.
     pub changes: Receiver<[u8; 32]>,
-    // Kept alive; dropping it stops the watch.
-    _watcher: notify::RecommendedWatcher,
+    /// Kept alive; dropping it stops the watch (the whole thread chain unwinds:
+    /// watcher -> debounce thread -> `changes` sender).
+    pub guard: notify::RecommendedWatcher,
 }
 
 pub fn hash_file(path: &Path) -> Option<[u8; 32]> {
@@ -74,7 +75,7 @@ pub fn watch_file(file: PathBuf, debounce: Duration) -> notify::Result<FileWatch
         }
     });
 
-    Ok(FileWatch { changes, _watcher: watcher })
+    Ok(FileWatch { changes, guard: watcher })
 }
 
 #[cfg(test)]

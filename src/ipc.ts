@@ -15,10 +15,15 @@ export const saveFile = (path: string, content: string) =>
   invoke<string>("save_file", { path, content });
 export const addRecent = (path: string) => invoke<void>("add_recent", { path });
 export const takePendingOpen = () => invoke<string[]>("take_pending_open");
+export const watchFile = (path: string) => invoke<void>("watch_file", { path });
+export const writeRecovery = (fileName: string, content: string) =>
+  invoke<string>("write_recovery", { fileName, content });
 
 export const onMenu = (cb: (id: string) => void) =>
   listen<string>("menu", (e) => cb(e.payload));
 export const onOpenRequest = (cb: () => void) => listen("open-request", () => cb());
+export const onFileChanged = (cb: (hash: string) => void) =>
+  listen<string>("file-changed", (e) => cb(e.payload));
 
 export const setTitle = (title: string) => getCurrentWindow().setTitle(title);
 

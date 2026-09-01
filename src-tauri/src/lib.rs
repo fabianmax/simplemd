@@ -28,10 +28,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(PendingOpen(Mutex::new(initial)))
+        .manage(commands::ActiveWatch(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             commands::read_file,
             commands::save_file,
             commands::add_recent,
+            commands::watch_file,
+            commands::write_recovery,
             take_pending_open,
         ])
         .setup(|app| {

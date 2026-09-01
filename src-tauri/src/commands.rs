@@ -6,7 +6,9 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use std::sync::Mutex;
+use std::time::Duration;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 fn hex(h: [u8; 32]) -> String {
     h.iter().map(|b| format!("{b:02x}")).collect()
@@ -59,6 +61,49 @@ pub fn save_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<String> {
     }
     fs::rename(&tmp, path)?;
     Ok(hex(Sha256::digest(bytes).into()))
+}
+
+// --- file watching --------------------------------------------------------
+
+/// The single active watch (v1: one file). Replacing it drops the old
+/// watcher, which unwinds its debounce thread and forwarding thread.
+pub struct ActiveWatch(pub Mutex<Option<notify::RecommendedWatcher>>);
+
+#[tauri::command]
+pub fn watch_file(
+    app: AppHandle,
+    state: State<ActiveWatch>,
+    path: String,
+) -> Result<(), String> {
+    let fw = crate::watcher::watch_file(PathBuf::from(&path), Duration::from_millis(120))
+        .map_err(|e| e.to_string())?;
+    *state.0.lock().unwrap() = Some(fw.guard);
+    let changes = fw.changes;
+    std::thread::spawn(move || {
+        while let Ok(h) = changes.recv() {
+            let _ = app.emit("file-changed", hex(h));
+        }
+    });
+    Ok(())
+}
+
+/// Sidecar recovery copy — written the moment a conflict is detected,
+/// BEFORE the user chooses. Never lose an edit (CLAUDE.md requirement #3).
+#[tauri::command]
+pub fn write_recovery(app: AppHandle, file_name: String, content: String) -> Result<String, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("recovery");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let path = dir.join(format!("{ts}-{file_name}"));
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 // --- recent files -------------------------------------------------------------
@@ -133,6 +178,23 @@ mod tests {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         save_atomic(&path, b"y").unwrap();
         assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+    }
+
+    #[test]
+    fn save_triggers_watch_with_matching_hash() {
+        // The save->watch interplay the frontend's echo suppression relies on:
+        // the hash save_atomic returns must equal the hash the watcher emits.
+        let dir = tempdir();
+        let path = dir.join("watched.md");
+        fs::write(&path, "old").unwrap();
+        let w = crate::watcher::watch_file(path.clone(), std::time::Duration::from_millis(120))
+            .unwrap();
+        let returned = save_atomic(&path, b"agent-or-self wrote this").unwrap();
+        let emitted = w
+            .changes
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("watcher missed an atomic save");
+        assert_eq!(hex(emitted), returned);
     }
 
     #[test]

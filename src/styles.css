@@ -16,3 +16,27 @@ html, body, #app {
   color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }
+
+#app { display: flex; flex-direction: column; }
+.editor-host { flex: 1; min-height: 0; }
+.editor-host .cm-editor { height: 100%; }
+
+.conflict-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 13px;
+  background: color-mix(in srgb, #e5a50a 18%, var(--bg));
+  border-bottom: 1px solid color-mix(in srgb, #e5a50a 40%, transparent);
+}
+.conflict-bar[hidden] { display: none; }
+.conflict-bar button {
+  font: inherit;
+  padding: 2px 10px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
