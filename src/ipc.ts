@@ -16,6 +16,12 @@ export const saveFile = (path: string, content: string) =>
   invoke<string>("save_file", { path, content });
 export const addRecent = (path: string) => invoke<void>("add_recent", { path });
 export const getRecents = () => invoke<string[]>("get_recents");
+export interface DirEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+}
+export const listDir = (path: string) => invoke<DirEntry[]>("list_dir", { path });
 export const takePendingOpen = () => invoke<string[]>("take_pending_open");
 export const watchFile = (path: string) => invoke<void>("watch_file", { path });
 export const unwatchFile = (path: string) => invoke<void>("unwatch_file", { path });
@@ -38,6 +44,11 @@ export async function pickMarkdownFile(): Promise<string | null> {
     multiple: false,
     filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
   });
+  return typeof picked === "string" ? picked : null;
+}
+
+export async function pickFolder(): Promise<string | null> {
+  const picked = await openDialog({ directory: true, multiple: false });
   return typeof picked === "string" ? picked : null;
 }
 

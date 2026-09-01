@@ -251,3 +251,45 @@ html, body, #app {
   border-radius: 4px;
 }
 .diff-pill button:hover { background: var(--band); }
+
+/* --- file browser ------------------------------------------------------------ */
+.main-row { display: flex; flex: 1; min-height: 0; }
+.main-row .editor-host { flex: 1; }
+.browser {
+  width: 220px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, var(--band) 60%, var(--bg));
+  font-size: 12.5px;
+  overflow: hidden;
+}
+.browser[hidden] { display: none; }
+.browser-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-weight: 600;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.browser-header span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.browser-header button {
+  border: none; background: none; color: var(--fg-dim); cursor: pointer;
+  border-radius: 4px; padding: 1px 5px; font-size: 12px;
+}
+.browser-header button:hover { background: var(--band); color: var(--fg); }
+.browser-tree { overflow-y: auto; flex: 1; padding: 4px 0; }
+.browser-row {
+  padding: 2.5px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  color: var(--fg-dim);
+}
+.browser-file { color: var(--fg); }
+.browser-row:hover { background: var(--band); }
+.browser-active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.browser-hint { padding: 12px; color: var(--fg-dim); }

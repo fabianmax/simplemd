@@ -63,6 +63,51 @@ pub fn save_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<String> {
     Ok(hex(Sha256::digest(bytes).into()))
 }
 
+// --- file browser -----------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct DirEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+}
+
+/// One directory level, lazily fetched per expand. A browser, NOT an index
+/// (CLAUDE.md): no recursion, no cache, no vault. Shows subdirectories and
+/// markdown files; hides dotfiles.
+#[tauri::command]
+pub fn frontend_log(msg: String) {
+    eprintln!("[frontend] {msg}");
+}
+
+#[tauri::command]
+pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
+    let mut entries: Vec<DirEntry> = fs::read_dir(&path)
+        .map_err(|e| format!("Cannot read {path}: {e}"))?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                return None;
+            }
+            let is_dir = e.file_type().ok()?.is_dir();
+            let is_md = name.rsplit('.').next().map_or(false, |ext| {
+                ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown")
+            });
+            if !is_dir && !is_md {
+                return None;
+            }
+            Some(DirEntry {
+                name,
+                path: e.path().to_string_lossy().into_owned(),
+                is_dir,
+            })
+        })
+        .collect();
+    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    Ok(entries)
+}
+
 // --- file watching --------------------------------------------------------
 
 /// Active watches, one per open tab. Dropping a guard unwinds its
@@ -198,6 +243,21 @@ mod tests {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         save_atomic(&path, b"y").unwrap();
         assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+    }
+
+    #[test]
+    fn list_dir_filters_and_sorts() {
+        let dir = tempdir();
+        fs::create_dir_all(dir.join("zsub")).unwrap();
+        fs::write(dir.join("b-plan.md"), "x").unwrap();
+        fs::write(dir.join("A-notes.MD"), "x").unwrap();
+        fs::write(dir.join("code.rs"), "x").unwrap();
+        fs::write(dir.join(".hidden.md"), "x").unwrap();
+        let got = list_dir(dir.to_string_lossy().into_owned()).unwrap();
+        let names: Vec<_> = got.iter().map(|e| e.name.as_str()).collect();
+        // dirs first, then md files case-insensitively sorted; .rs and dotfiles gone
+        assert_eq!(names, vec!["zsub", "A-notes.MD", "b-plan.md"]);
+        assert!(got[0].is_dir);
     }
 
     #[test]

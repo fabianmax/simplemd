@@ -12,6 +12,7 @@ import { formatCommands } from "./editor/format";
 import * as ipc from "./ipc";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { SwitcherUI } from "./switcher-ui";
+import { BrowserPanel } from "./browser";
 
 export interface Tab {
   path: string;
@@ -37,6 +38,7 @@ export class App {
   private tabStrip: HTMLElement;
   private switcher: SwitcherUI;
   private diffPill: HTMLElement;
+  private browser: BrowserPanel;
   private diffCount: HTMLElement;
   private diffNav = 0;
 
@@ -51,9 +53,13 @@ export class App {
     this.emptyState.innerHTML =
       "<div><h2>simplemd</h2><p>Drop a Markdown file here, or press <kbd>⌘O</kbd></p></div>";
     parent.appendChild(this.emptyState);
+    const mainRow = document.createElement("div");
+    mainRow.className = "main-row";
+    parent.appendChild(mainRow);
+    this.browser = new BrowserPanel(mainRow, (path) => void this.openPath(path));
     const editorHost = document.createElement("div");
     editorHost.className = "editor-host";
-    parent.appendChild(editorHost);
+    mainRow.appendChild(editorHost);
     ({ pill: this.diffPill, count: this.diffCount } = this.buildDiffPill(parent));
     this.view = new EditorView({ state: this.makeState(""), parent: editorHost });
     this.switcher = new SwitcherUI(
@@ -145,6 +151,9 @@ export class App {
       this.togglePreview();
     } else if (id === "quick-switch") {
       await this.openSwitcher();
+    } else if (id === "toggle-browser") {
+      const dir = this.activeTab?.path.replace(/\/[^/]+$/, "") ?? null;
+      await this.browser.toggle(dir, this.activeTab?.path ?? null);
     } else if (id.startsWith("recent:")) {
       await this.openPath(id.slice("recent:".length));
     } else if (id.startsWith("fmt:")) {
@@ -194,6 +203,7 @@ export class App {
       this.view.dispatch({ effects });
     }
     this.renderChrome();
+    this.browser.markActive(tab.path);
     this.view.focus();
   }
 
