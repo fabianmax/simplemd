@@ -5,7 +5,7 @@
   --fg-dim: #86868b;
   --accent: #0969da;
   --band: rgba(0, 0, 0, 0.045);
-  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --mono: Menlo, "SF Mono", ui-monospace, monospace;
   --syn-keyword: #cf222e;
   --syn-string: #0a3069;
   --syn-number: #0550ae;
@@ -59,7 +59,10 @@ html, body, #app {
 .lp-hidden { font-size: 0.01em; opacity: 0; }
 
 /* constant (reveal-independent) line styling — heights never shift */
-.lp-code-line { background: var(--band); font-family: var(--mono); font-size: 0.92em; }
+/* No font-size here: t.monospace (highlight.ts) already sizes CodeText, and
+   @lezer/markdown tags InlineCode AND CodeText the same, so a size on the
+   line compounds with the span's — that is why fenced code read tiny. */
+.lp-code-line { background: var(--band); font-family: var(--mono); }
 .lp-fence-line { color: var(--fg-dim); }
 .lp-quote-line {
   border-left: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
