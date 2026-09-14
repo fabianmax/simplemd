@@ -16,6 +16,7 @@ import { SwitcherUI } from "./switcher-ui";
 import { docStats, formatStats } from "./stats";
 import { BrowserPanel } from "./browser";
 import { ICON, svgIcon } from "./icons";
+import { DEFAULT_ZOOM, loadZoom, saveZoom, stepZoom, zoomKeyDirection, zoomLabel } from "./zoom";
 
 export interface Tab {
   /** null = untitled scratch tab, gets a path on first save */
@@ -46,6 +47,9 @@ export class App {
   private statsTimer: ReturnType<typeof setTimeout> | null = null;
   private browser: BrowserPanel;
   private browserToggle: HTMLButtonElement;
+  private zoomPill: HTMLElement;
+  private zoomTimer: ReturnType<typeof setTimeout> | null = null;
+  private zoom = DEFAULT_ZOOM;
   private diffCount: HTMLElement;
   private diffNav = 0;
 
@@ -87,6 +91,23 @@ export class App {
     this.statusBar.className = "status-bar";
     this.statusBar.hidden = true;
     column.appendChild(this.statusBar);
+    // After the diff pill in the DOM so CSS can lift it clear when both show.
+    this.zoomPill = document.createElement("div");
+    this.zoomPill.className = "zoom-pill";
+    this.zoomPill.hidden = true;
+    column.appendChild(this.zoomPill);
+    // Capture phase: the menu equivalents AppKit matches never reach here, so
+    // this only ever fires for the ones it cannot express (see zoomKeyDirection).
+    window.addEventListener(
+      "keydown",
+      (e) => {
+        const dir = zoomKeyDirection(e);
+        if (dir === 0) return;
+        e.preventDefault();
+        this.zoomBy(dir);
+      },
+      { capture: true },
+    );
     // Empty tab-strip area double-click opens a new tab (user feedback).
     this.tabStrip.ondblclick = (e) => {
       if (e.target === this.tabStrip) this.newUntitledTab();
@@ -206,6 +227,35 @@ export class App {
     if (tab) this.statusBar.textContent = formatStats(docStats(this.view.state.doc.toString()));
   }
 
+  zoomBy(dir: 1 | -1) {
+    this.applyZoom(stepZoom(this.zoom, dir));
+  }
+
+  resetZoom() {
+    this.applyZoom(DEFAULT_ZOOM);
+  }
+
+  private applyZoom(zoom: number, flash = true) {
+    this.zoom = zoom;
+    this.view.dom.style.setProperty("--zoom", String(zoom));
+    // Unlike the vw ramp, this font-size change does NOT come from a window
+    // resize, so CM6's DOMObserver will not remeasure on its own.
+    this.view.requestMeasure();
+    saveZoom(zoom);
+    if (flash) this.flashZoom();
+  }
+
+  /** The size is only worth showing while it is changing. */
+  private flashZoom() {
+    this.zoomPill.textContent = zoomLabel(this.zoom);
+    this.zoomPill.hidden = false;
+    if (this.zoomTimer) clearTimeout(this.zoomTimer);
+    this.zoomTimer = setTimeout(() => {
+      this.zoomPill.hidden = true;
+      this.zoomTimer = null;
+    }, 1400);
+  }
+
   /** The menu item (\u2318\u21e7B) and the tab-strip button share this path. */
   async toggleBrowser() {
     const dir = this.activeTab?.path?.replace(/\/[^/]+$/, "") ?? null;
@@ -248,6 +298,7 @@ export class App {
       if (tab && !tab.diff) tab.baseline = this.view.state.doc.toString();
     });
     await this.drainPending();
+    this.applyZoom(loadZoom(), false);
     this.renderChrome();
   }
 
@@ -271,6 +322,12 @@ export class App {
       await this.openSwitcher();
     } else if (id === "toggle-browser") {
       await this.toggleBrowser();
+    } else if (id === "zoom-in") {
+      this.zoomBy(1);
+    } else if (id === "zoom-out") {
+      this.zoomBy(-1);
+    } else if (id === "zoom-reset") {
+      this.resetZoom();
     } else if (id.startsWith("recent:")) {
       await this.openPath(id.slice("recent:".length));
     } else if (id.startsWith("fmt:")) {

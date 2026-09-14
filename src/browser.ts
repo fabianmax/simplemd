@@ -3,6 +3,7 @@
  *  fetched lazily on expand — no cache, no recursion, no vault. */
 import * as ipc from "./ipc";
 import { ICON, svgIcon } from "./icons";
+import { readStored, writeStored } from "./store";
 
 export type EntryKind = "dir" | "md" | "image" | "code" | "file";
 
@@ -25,24 +26,14 @@ export function clampWidth(px: number): number {
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(px)));
 }
 
-/** Width is a dragged-in preference, not configuration — it survives a relaunch
- *  without a settings surface. Storage can throw (private mode, wiped data), so
- *  every access is guarded and falls back to the default. */
 function storedWidth(): number {
-  try {
-    const raw = localStorage.getItem(WIDTH_KEY);
-    return raw ? clampWidth(Number(raw)) : DEFAULT_WIDTH;
-  } catch {
-    return DEFAULT_WIDTH;
-  }
+  const raw = readStored(WIDTH_KEY);
+  const n = Number(raw);
+  return raw !== null && Number.isFinite(n) && n > 0 ? clampWidth(n) : DEFAULT_WIDTH;
 }
 
 function storeWidth(px: number) {
-  try {
-    localStorage.setItem(WIDTH_KEY, String(px));
-  } catch {
-    /* not worth surfacing: the width simply resets next launch */
-  }
+  writeStored(WIDTH_KEY, String(px));
 }
 
 export class BrowserPanel {

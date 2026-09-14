@@ -322,6 +322,12 @@ highlight rule — same lezer tag as fenced code), the browser is drag-resizable
 with the width remembered in localStorage (guarded: unavailable storage just
 means the default), and the layout moved tabs/conflict bar/pill/status into an
 editor column right of the browser, so tabs no longer span the panel.
+**v1.6**: reader-controlled text size. Default ramp lowered ~1.5px (13.5px at an
+800px window, 16.5px at 1600px); ⌘= / ⌘- step a fixed ladder (60-200%) shown for
+1.4s in a corner pill; remembered in localStorage. ⌘0 could not be the reset —
+it is Paragraph in the Format menu. muda cannot express a main-row "+", so the
+menu carries ⌘= and a capture-phase keydown catches ⌘+ on layouts that have that
+key (AppKit consumes matched equivalents, so the two cannot double-step).
 Signing/notarization/Homebrew cask deferred by user decision 2026-09-01
 until a GitHub repo exists; app runs unsigned locally meanwhile.
 

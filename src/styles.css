@@ -44,11 +44,13 @@ html, body, #app {
   max-width: 76ch;
   margin: 0 auto;
   caret-color: var(--fg);
-  /* Scales with the WINDOW, not the editor pane: container units (cqi on
-     .editor-host) would resize the text every time the file browser is
-     toggled. 15px at an 800px window, 18px at 1600px, capped at 19px.
-     max-width above is in `ch`, so the measure widens in lockstep. */
-  font-size: clamp(14px, 0.375vw + 12px, 19px);
+  /* Two independent factors:
+     - the window ramp: scales with the WINDOW, not the editor pane, because
+       container units (cqi on .editor-host) would resize the text every time
+       the file browser is toggled. 13.5px at an 800px window, 16.5px at 1600px.
+     - --zoom: the reader's own ⌘= / ⌘- step, set on .cm-editor by app.ts.
+     max-width above is in `ch`, so the measure widens with both. */
+  font-size: calc(clamp(13px, 0.375vw + 10.5px, 17.5px) * var(--zoom, 1));
   line-height: 1.6;
 }
 .cm-editor .cm-line { padding: 0 24px; }
@@ -425,6 +427,25 @@ body.resizing { cursor: col-resize; user-select: none; }
   pointer-events: none;
 }
 .status-bar[hidden] { display: none; }
+
+/* Transient: only on screen while the size is actually changing. */
+.zoom-pill {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  z-index: 16;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--band) 70%, var(--bg));
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.zoom-pill[hidden] { display: none; }
+/* Lift clear of the diff pill when that one is showing (DOM order: pill first). */
+.diff-pill:not([hidden]) ~ .zoom-pill { bottom: 38px; }
 
 /* --- link hover affordance (v1.4.2) ------------------------------------------ */
 .lp-link { cursor: pointer; }
