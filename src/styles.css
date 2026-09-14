@@ -133,6 +133,8 @@ html, body, #app {
 /* --- tab strip -------------------------------------------------------------- */
 .tab-strip {
   display: flex;
+  align-items: center;
+  min-height: 28px;
   gap: 1px;
   background: var(--band);
   border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
@@ -289,23 +291,72 @@ html, body, #app {
 }
 .browser-header button:hover { background: var(--band); color: var(--fg); }
 .browser-tree { overflow-y: auto; flex: 1; padding: 4px 0; }
+/* Indentation lives on the level wrapper, not on each row, so nesting reads as
+   a guide line instead of as guessed whitespace. */
+.browser-level .browser-level {
+  margin-left: 15px;
+  border-left: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
 .browser-row {
-  padding: 5px 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
   cursor: default;
   color: var(--fg-dim);
-  line-height: 1.35;
+  line-height: 1.5;
   border-radius: 5px;
   margin: 0 4px;
 }
+.browser-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-chevron {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  opacity: 0.5;
+  transition: transform 0.12s ease;
+}
+.browser-row.browser-open > .browser-chevron { transform: rotate(90deg); }
+.browser-icon { width: 15px; height: 15px; flex: none; opacity: 0.7; }
+/* The only colour code in the panel: blue = markdown, dim = everything else. */
+.browser-md .browser-icon { color: var(--accent); opacity: 0.9; }
 .browser-dir { font-weight: 600; color: var(--fg); }
 .browser-file { color: var(--fg-dim); }
 .browser-file.browser-md { color: var(--fg); }
 .browser-row:hover { background: var(--band); }
+.browser-row:hover > .browser-chevron { opacity: 0.85; }
 .browser-active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .browser-hint { padding: 12px; color: var(--fg-dim); }
+.browser-hint p { margin: 0 0 8px; }
+.browser-pick {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.browser-pick:hover { background: var(--band); }
+
+/* Pinned strip chrome: sticky so it survives horizontal tab overflow. */
+.strip-btn {
+  position: sticky;
+  left: 0;
+  flex: none;
+  display: flex;
+  align-items: center;
+  border: none;
+  border-radius: 5px;
+  margin: 3px 2px 0 4px;
+  padding: 3px 5px;
+  color: var(--fg-dim);
+  background: linear-gradient(var(--band), var(--band)), var(--bg);
+  cursor: pointer;
+}
+.strip-btn:hover { color: var(--fg); }
+.strip-btn-on { color: var(--accent); }
+.strip-btn-icon { width: 15px; height: 15px; }
 
 /* --- v1.4 feedback: tabs, pill, status bar --------------------------------- */
 .tab {

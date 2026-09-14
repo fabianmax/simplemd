@@ -15,6 +15,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { SwitcherUI } from "./switcher-ui";
 import { docStats, formatStats } from "./stats";
 import { BrowserPanel } from "./browser";
+import { ICON, svgIcon } from "./icons";
 
 export interface Tab {
   /** null = untitled scratch tab, gets a path on first save */
@@ -44,14 +45,23 @@ export class App {
   private statusBar: HTMLElement;
   private statsTimer: ReturnType<typeof setTimeout> | null = null;
   private browser: BrowserPanel;
+  private browserToggle: HTMLButtonElement;
   private diffCount: HTMLElement;
   private diffNav = 0;
 
   constructor(parent: HTMLElement) {
     this.tabStrip = document.createElement("div");
     this.tabStrip.className = "tab-strip";
-    this.tabStrip.hidden = true;
     parent.appendChild(this.tabStrip);
+    // Pinned chrome, not a tab: the strip stays visible with zero tabs, because
+    // that is exactly when you need the browser to go find a file.
+    this.browserToggle = document.createElement("button");
+    this.browserToggle.className = "strip-btn";
+    this.browserToggle.title = "Toggle file browser (\u2318\u21e7B)";
+    this.browserToggle.setAttribute("aria-label", "Toggle file browser");
+    this.browserToggle.setAttribute("aria-pressed", "false");
+    this.browserToggle.appendChild(svgIcon(ICON.sidebar, "strip-btn-icon"));
+    this.browserToggle.onclick = () => void this.toggleBrowser();
     this.conflictBar = this.buildConflictBar(parent);
     this.emptyState = document.createElement("div");
     this.emptyState.className = "empty-state";
@@ -189,6 +199,19 @@ export class App {
     if (tab) this.statusBar.textContent = formatStats(docStats(this.view.state.doc.toString()));
   }
 
+  /** The menu item (\u2318\u21e7B) and the tab-strip button share this path. */
+  async toggleBrowser() {
+    const dir = this.activeTab?.path?.replace(/\/[^/]+$/, "") ?? null;
+    await this.browser.toggle(dir, this.activeTab?.path ?? null);
+    this.syncBrowserToggle();
+  }
+
+  private syncBrowserToggle() {
+    const on = this.browser.isOpen;
+    this.browserToggle.classList.toggle("strip-btn-on", on);
+    this.browserToggle.setAttribute("aria-pressed", String(on));
+  }
+
   togglePreview() {
     this.previewOn = !this.previewOn;
     this.view.dispatch({
@@ -240,8 +263,7 @@ export class App {
     } else if (id === "quick-switch") {
       await this.openSwitcher();
     } else if (id === "toggle-browser") {
-      const dir = this.activeTab?.path?.replace(/\/[^/]+$/, "") ?? null;
-      await this.browser.toggle(dir, this.activeTab?.path ?? null);
+      await this.toggleBrowser();
     } else if (id.startsWith("recent:")) {
       await this.openPath(id.slice("recent:".length));
     } else if (id.startsWith("fmt:")) {
@@ -550,10 +572,11 @@ export class App {
   renderChrome() {
     const tab = this.activeTab;
     this.emptyState.hidden = this.tabs.length > 0;
-    this.tabStrip.hidden = this.tabs.length === 0;
     this.conflictBar.hidden = !tab?.conflict;
+    this.syncBrowserToggle();
 
     this.tabStrip.replaceChildren(
+      this.browserToggle,
       ...this.tabs.map((t, i) => {
         const el = document.createElement("div");
         el.className =
@@ -580,7 +603,6 @@ export class App {
         el.onauxclick = (e) => {
           if (e.button === 1) void this.closeTab(i);
         };
-        this.tabStrip.appendChild(el);
         return el;
       }),
     );

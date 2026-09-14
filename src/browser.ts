@@ -2,6 +2,19 @@
  *  at the active file's directory or a folder you point it at; every level is
  *  fetched lazily on expand — no cache, no recursion, no vault. */
 import * as ipc from "./ipc";
+import { ICON, svgIcon } from "./icons";
+
+export type EntryKind = "dir" | "md" | "image" | "code" | "file";
+
+/** Five kinds, deliberately: this is decoration, not a file-type registry. */
+export function entryKind(name: string, isDir: boolean): EntryKind {
+  if (isDir) return "dir";
+  if (/\.(md|markdown)$/i.test(name)) return "md";
+  if (/\.(png|jpe?g|gif|webp|svg|heic|avif)$/i.test(name)) return "image";
+  if (/\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|rb|java|swift|c|h|cpp|sh|zsh|json|toml|ya?ml|css|html?)$/i.test(name))
+    return "code";
+  return "file";
+}
 
 export class BrowserPanel {
   readonly root: HTMLElement;
@@ -72,15 +85,54 @@ export class BrowserPanel {
     this.tree.replaceChildren(await this.renderLevel(path, 0));
   }
 
+  /** With no root there is no header, so the folder picker has to live here —
+   *  otherwise the empty panel is a dead end. */
   private emptyHint() {
     const d = document.createElement("div");
     d.className = "browser-hint";
-    d.textContent = "Open a file to root the browser";
+    const line = document.createElement("p");
+    line.textContent = "Open a file to root the browser, or";
+    const pick = document.createElement("button");
+    pick.className = "browser-pick";
+    pick.textContent = "Choose folder…";
+    pick.onclick = async () => {
+      const p = await ipc.pickFolder();
+      if (p) await this.setRoot(p);
+    };
+    d.append(line, pick);
     return d;
   }
 
+  private row(e: ipc.DirEntry): HTMLElement {
+    const kind = entryKind(e.name, e.is_dir);
+    const row = document.createElement("div");
+    row.className =
+      "browser-row " + (e.is_dir ? "browser-dir" : `browser-file browser-${kind}`);
+    row.dataset.path = e.path;
+    row.dataset.kind = kind;
+    // Files carry an empty chevron slot so their names align with folder names.
+    let chevron: Element;
+    if (e.is_dir) {
+      chevron = svgIcon(ICON.chevron, "browser-chevron");
+    } else {
+      const slot = document.createElement("span");
+      slot.className = "browser-chevron";
+      chevron = slot;
+    }
+    const name = document.createElement("span");
+    name.className = "browser-name";
+    name.textContent = e.name;
+    name.title = e.name;
+    row.append(chevron, svgIcon(ICON[kind], "browser-icon"), name);
+    if (!e.is_dir && e.path === this.activeFile) row.classList.add("browser-active");
+    return row;
+  }
+
   private async renderLevel(dirPath: string, depth: number): Promise<HTMLElement> {
+    // Indentation and the guide rule live on this wrapper, not on each row.
     const box = document.createElement("div");
+    box.className = "browser-level";
+    box.dataset.depth = String(depth);
     let entries;
     try {
       entries = await ipc.listDir(dirPath);
@@ -88,16 +140,7 @@ export class BrowserPanel {
       return box;
     }
     for (const e of entries) {
-      const row = document.createElement("div");
-      const isMd = /\.(md|markdown)$/i.test(e.name);
-      row.className =
-        "browser-row " +
-        (e.is_dir ? "browser-dir" : isMd ? "browser-file browser-md" : "browser-file");
-      // files indent one extra step so they align past the folder chevron
-      row.style.paddingLeft = `${10 + depth * 14 + (e.is_dir ? 0 : 14)}px`;
-      row.dataset.path = e.path;
-      row.textContent = (e.is_dir ? "▸ " : "") + e.name;
-      if (!e.is_dir && e.path === this.activeFile) row.classList.add("browser-active");
+      const row = this.row(e);
       box.appendChild(row);
       if (e.is_dir) {
         let child: HTMLElement | null = null;
@@ -105,11 +148,11 @@ export class BrowserPanel {
           if (child) {
             const open = !child.hidden;
             child.hidden = open;
-            row.textContent = (open ? "▸ " : "▾ ") + e.name;
+            row.classList.toggle("browser-open", !open);
           } else {
             child = await this.renderLevel(e.path, depth + 1); // lazy fetch
             row.after(child);
-            row.textContent = "▾ " + e.name;
+            row.classList.add("browser-open");
           }
         };
       } else {
