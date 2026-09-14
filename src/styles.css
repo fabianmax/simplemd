@@ -135,6 +135,11 @@ html, body, #app {
   display: flex;
   align-items: center;
   min-height: 28px;
+  /* Above .empty-state (z-index 5), which is inset:0 over the whole app and
+     would otherwise bury the pinned browser toggle whenever no file is open —
+     which is precisely when the browser is needed. */
+  position: relative;
+  z-index: 6;
   gap: 1px;
   background: var(--band);
   border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);

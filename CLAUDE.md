@@ -311,6 +311,12 @@ external reloads highlight added words + deletion carets as view-only
 decorations, scroll-to-first-change, floating pill with count + ↑/↓ + dismiss
 (dismiss = new baseline). Own saves reset the baseline. 69 vitest + 8 cargo.
 **v1.3**: file browser (⌘⇧B) — lazy per-level listing, no index/vault.
+**v1.5**: visual batch (`docs/plans/v1.5-visual-batch.md`) — code font reads as
+code (Menlo stack; the 0.92em on the line was compounding with the 0.92em on
+the span, because @lezer/markdown gives InlineCode and CodeText the same tag),
+text scales with the window (`clamp` on `.cm-content`; the `76ch` measure
+widens with it), file browser gets SVG icons, a real tree with guide rules, and
+a toggle pinned to the tab strip sharing one path with ⌘⇧B.
 Signing/notarization/Homebrew cask deferred by user decision 2026-09-01
 until a GitHub repo exists; app runs unsigned locally meanwhile.
 
