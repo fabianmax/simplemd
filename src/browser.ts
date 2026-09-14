@@ -16,10 +16,41 @@ export function entryKind(name: string, isDir: boolean): EntryKind {
   return "file";
 }
 
+const WIDTH_KEY = "simplemd.browser-width";
+export const MIN_WIDTH = 160;
+export const MAX_WIDTH = 520;
+export const DEFAULT_WIDTH = 220;
+
+export function clampWidth(px: number): number {
+  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(px)));
+}
+
+/** Width is a dragged-in preference, not configuration — it survives a relaunch
+ *  without a settings surface. Storage can throw (private mode, wiped data), so
+ *  every access is guarded and falls back to the default. */
+function storedWidth(): number {
+  try {
+    const raw = localStorage.getItem(WIDTH_KEY);
+    return raw ? clampWidth(Number(raw)) : DEFAULT_WIDTH;
+  } catch {
+    return DEFAULT_WIDTH;
+  }
+}
+
+function storeWidth(px: number) {
+  try {
+    localStorage.setItem(WIDTH_KEY, String(px));
+  } catch {
+    /* not worth surfacing: the width simply resets next launch */
+  }
+}
+
 export class BrowserPanel {
   readonly root: HTMLElement;
   private header: HTMLElement;
   private tree: HTMLElement;
+  private resizer: HTMLElement;
+  private widthPx = DEFAULT_WIDTH;
   private rootPath: string | null = null;
   private activeFile: string | null = null;
 
@@ -36,20 +67,57 @@ export class BrowserPanel {
     this.tree.className = "browser-tree";
     this.root.append(this.header, this.tree);
     parent.appendChild(this.root);
+    this.resizer = document.createElement("div");
+    this.resizer.className = "browser-resizer";
+    this.resizer.hidden = true;
+    this.resizer.setAttribute("role", "separator");
+    this.resizer.setAttribute("aria-orientation", "vertical");
+    this.resizer.onmousedown = (e) => this.beginResize(e);
+    parent.appendChild(this.resizer);
+    this.setWidth(storedWidth());
   }
 
   get isOpen() {
     return !this.root.hidden;
   }
 
+  get width() {
+    return this.widthPx;
+  }
+
+  setWidth(px: number) {
+    this.widthPx = clampWidth(px);
+    this.root.style.width = `${this.widthPx}px`;
+  }
+
+  /** Mouse events, not pointer events: the rest of this codebase already drives
+   *  its drag handling from mousedown/mouseup, and they are trivially testable. */
+  private beginResize(e: MouseEvent) {
+    e.preventDefault(); // otherwise the drag starts a text selection
+    const startX = e.clientX;
+    const startWidth = this.widthPx;
+    const move = (ev: MouseEvent) => this.setWidth(startWidth + (ev.clientX - startX));
+    const up = () => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      document.body.classList.remove("resizing");
+      storeWidth(this.widthPx);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+    document.body.classList.add("resizing");
+  }
+
   async toggle(defaultRoot: string | null, activeFile: string | null) {
     if (this.isOpen) {
       this.root.hidden = true;
+      this.resizer.hidden = true;
       return;
     }
     this.activeFile = activeFile;
     if (!this.rootPath) this.rootPath = defaultRoot;
     this.root.hidden = false;
+    this.resizer.hidden = false;
     if (this.rootPath) await this.setRoot(this.rootPath);
     else this.tree.replaceChildren(this.emptyHint());
   }

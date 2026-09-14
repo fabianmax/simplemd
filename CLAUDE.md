@@ -317,6 +317,11 @@ the span, because @lezer/markdown gives InlineCode and CodeText the same tag),
 text scales with the window (`clamp` on `.cm-content`; the `76ch` measure
 widens with it), file browser gets SVG icons, a real tree with guide rules, and
 a toggle pinned to the tab strip sharing one path with ⌘⇧B.
+**v1.5.1** (usage feedback): inline code renders as a chip (a decoration, not a
+highlight rule — same lezer tag as fenced code), the browser is drag-resizable
+with the width remembered in localStorage (guarded: unavailable storage just
+means the default), and the layout moved tabs/conflict bar/pill/status into an
+editor column right of the browser, so tabs no longer span the panel.
 Signing/notarization/Homebrew cask deferred by user decision 2026-09-01
 until a GitHub repo exists; app runs unsigned locally meanwhile.
 

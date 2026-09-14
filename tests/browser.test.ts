@@ -8,7 +8,14 @@ vi.mock("../src/ipc", () => ({
   pickFolder: () => pickFolder(),
 }));
 
-import { BrowserPanel, entryKind } from "../src/browser";
+import {
+  BrowserPanel,
+  entryKind,
+  clampWidth,
+  MIN_WIDTH,
+  MAX_WIDTH,
+  DEFAULT_WIDTH,
+} from "../src/browser";
 
 const entry = (name: string, dir: boolean, base = "/root") => ({
   name,
@@ -46,6 +53,15 @@ describe("BrowserPanel", () => {
     panel = new BrowserPanel(parent, (p) => opened.push(p));
     listDir.mockReset();
     pickFolder.mockReset();
+    // Node shadows the jsdom global ("localStorage is not available because
+    // --localstorage-file was not provided"), so stand one up explicitly.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+    });
   });
 
   it("renders one level; files open on click", async () => {
@@ -125,6 +141,70 @@ describe("BrowserPanel", () => {
     expect(panel.isOpen).toBe(true);
     await panel.toggle("/root", null);
     expect(panel.isOpen).toBe(false);
+  });
+
+  it("drags to a new width, clamped at both ends, and remembers it", async () => {
+    listDir.mockResolvedValue([entry("a.md", false)]);
+    await panel.toggle("/root", null);
+    expect(panel.width).toBe(DEFAULT_WIDTH);
+    const grip = parent.querySelector<HTMLElement>(".browser-resizer")!;
+    expect(grip.hidden).toBe(false);
+
+    grip.dispatchEvent(new MouseEvent("mousedown", { clientX: 220, bubbles: true }));
+    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 300 }));
+    expect(panel.width).toBe(300);
+    expect(panel.root.style.width).toBe("300px");
+
+    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 9000 }));
+    expect(panel.width).toBe(MAX_WIDTH);
+    document.dispatchEvent(new MouseEvent("mousemove", { clientX: -9000 }));
+    expect(panel.width).toBe(MIN_WIDTH);
+
+    document.dispatchEvent(new MouseEvent("mouseup"));
+    expect(localStorage.getItem("simplemd.browser-width")).toBe(String(MIN_WIDTH));
+    // listeners released: a stray move after mouseup must not resize anything
+    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 400 }));
+    expect(panel.width).toBe(MIN_WIDTH);
+    expect(document.body.classList.contains("resizing")).toBe(false);
+  });
+
+  it("picks the remembered width up on the next launch", () => {
+    localStorage.setItem("simplemd.browser-width", "300");
+    const next = new BrowserPanel(document.createElement("div"), () => {});
+    expect(next.width).toBe(300);
+  });
+
+  it("clamps a corrupt stored width instead of trusting it", () => {
+    localStorage.setItem("simplemd.browser-width", "99999");
+    const next = new BrowserPanel(document.createElement("div"), () => {});
+    expect(next.width).toBe(MAX_WIDTH);
+    expect(clampWidth(0)).toBe(MIN_WIDTH);
+  });
+
+  it("falls back to the default when storage is unavailable or throws", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("SecurityError");
+      },
+      setItem: () => {
+        throw new Error("SecurityError");
+      },
+    });
+    const next = new BrowserPanel(document.createElement("div"), () => {});
+    expect(next.width).toBe(DEFAULT_WIDTH);
+    // and a drag must still work, it just will not be remembered
+    expect(() => next.setWidth(300)).not.toThrow();
+    expect(next.width).toBe(300);
+  });
+
+  it("hides the resize grip along with the panel", async () => {
+    listDir.mockResolvedValue([entry("a.md", false)]);
+    const grip = parent.querySelector<HTMLElement>(".browser-resizer")!;
+    expect(grip.hidden).toBe(true);
+    await panel.toggle("/root", null);
+    expect(grip.hidden).toBe(false);
+    await panel.toggle("/root", null);
+    expect(grip.hidden).toBe(true);
   });
 
   it("with no root, the hint offers a folder picker (otherwise a dead end)", async () => {

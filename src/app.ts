@@ -50,9 +50,20 @@ export class App {
   private diffNav = 0;
 
   constructor(parent: HTMLElement) {
+    // Layout: the browser is full-height at the left; everything that belongs to
+    // the document — tabs, conflict bar, empty state, editor, pill, status — is
+    // stacked in a column to its right, so tabs never span the browser.
+    const mainRow = document.createElement("div");
+    mainRow.className = "main-row";
+    parent.appendChild(mainRow);
+    this.browser = new BrowserPanel(mainRow, (path) => void this.openAnyPath(path));
+    const column = document.createElement("div");
+    column.className = "editor-column";
+    mainRow.appendChild(column);
+
     this.tabStrip = document.createElement("div");
     this.tabStrip.className = "tab-strip";
-    parent.appendChild(this.tabStrip);
+    column.appendChild(this.tabStrip);
     // Pinned chrome, not a tab: the strip stays visible with zero tabs, because
     // that is exactly when you need the browser to go find a file.
     this.browserToggle = document.createElement("button");
@@ -62,24 +73,20 @@ export class App {
     this.browserToggle.setAttribute("aria-pressed", "false");
     this.browserToggle.appendChild(svgIcon(ICON.sidebar, "strip-btn-icon"));
     this.browserToggle.onclick = () => void this.toggleBrowser();
-    this.conflictBar = this.buildConflictBar(parent);
+    this.conflictBar = this.buildConflictBar(column);
     this.emptyState = document.createElement("div");
     this.emptyState.className = "empty-state";
     this.emptyState.innerHTML =
       "<div><h2>simplemd</h2><p>Drop a Markdown file here, or press <kbd>⌘O</kbd></p></div>";
-    parent.appendChild(this.emptyState);
-    const mainRow = document.createElement("div");
-    mainRow.className = "main-row";
-    parent.appendChild(mainRow);
-    this.browser = new BrowserPanel(mainRow, (path) => void this.openAnyPath(path));
+    column.appendChild(this.emptyState);
     const editorHost = document.createElement("div");
     editorHost.className = "editor-host";
-    mainRow.appendChild(editorHost);
-    ({ pill: this.diffPill, count: this.diffCount } = this.buildDiffPill(parent));
+    column.appendChild(editorHost);
+    ({ pill: this.diffPill, count: this.diffCount } = this.buildDiffPill(column));
     this.statusBar = document.createElement("div");
     this.statusBar.className = "status-bar";
     this.statusBar.hidden = true;
-    parent.appendChild(this.statusBar);
+    column.appendChild(this.statusBar);
     // Empty tab-strip area double-click opens a new tab (user feedback).
     this.tabStrip.ondblclick = (e) => {
       if (e.target === this.tabStrip) this.newUntitledTab();

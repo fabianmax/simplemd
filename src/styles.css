@@ -72,6 +72,15 @@ html, body, #app {
   border-left: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+/* Inline code reads as a chip. Cannot be done in highlight.ts: @lezer/markdown
+   gives InlineCode and CodeText the same t.monospace tag, so a rule there would
+   tint every fenced line too. */
+.lp-inline-code {
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  border-radius: 4px;
+  padding: 0.08em 0.3em;
+}
+
 .lp-checkbox { cursor: pointer; color: var(--accent); }
 .lp-checkbox.lp-checked { color: var(--fg-dim); }
 
@@ -269,9 +278,32 @@ html, body, #app {
 
 /* --- file browser ------------------------------------------------------------ */
 .main-row { display: flex; flex: 1; min-height: 0; }
+/* Everything document-shaped stacks here, to the RIGHT of the browser: tabs,
+   conflict bar, empty state, editor, pill, status bar. Positioned, so those
+   last three anchor to the editor rather than to the window. */
+.editor-column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
 .main-row .editor-host { flex: 1; }
+.browser-resizer {
+  flex: none;
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.browser-resizer:hover { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.browser-resizer[hidden] { display: none; }
+/* Keep the cursor and kill text selection for the whole drag, not just over
+   the 4px handle. */
+body.resizing { cursor: col-resize; user-select: none; }
 .browser {
-  width: 220px;
+  width: 220px; /* first paint only — BrowserPanel sets the stored width inline */
   flex: none;
   display: flex;
   flex-direction: column;
