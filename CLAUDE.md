@@ -360,9 +360,11 @@ cert is missing. Homebrew cask is scaffolded at `packaging/homebrew/` and
 deliberately not published: a cask fetches a release asset, and on a private
 repo that asset is private too. It needs a public repo *and* a notarized DMG.
 
-Version mismatch left alone deliberately: `tauri.conf.json` says 0.1.0 while
-this file talks in v1.x milestones. The DMG name and release tag both derive
-from it, so that is a product call to make before the first tag.
+Version settled at **0.1.9** (user decision 2026-09-15) — aligned across
+package.json, Cargo.toml, tauri.conf.json and both lockfiles. The v1.x numbers
+throughout this file are feature milestones, not releases; the release series is
+0.x and the v1.9 milestone ships as 0.1.9. The DMG name and release tag both
+derive from tauri.conf.json, so bump it there first and the rest follow.
 
 Open polish debt: diff visuals (user: "not 100% appealing" — colors,
 deletion carets, pill).

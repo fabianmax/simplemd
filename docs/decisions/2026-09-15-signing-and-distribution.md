@@ -78,14 +78,19 @@ Until then the app runs unsigned locally, exactly as before.
 For a **local** signed build, the same env vars work with `npm run tauri build`;
 Tauri imports the certificate into a temporary keychain itself.
 
-## Open question: the version number
+## The version number: 0.1.9
 
-`tauri.conf.json` says `0.1.0`, while CLAUDE.md and the shipped feature history
-talk in v1.1–v1.9 milestones. The DMG filename and the release tag both derive
-from `tauri.conf.json`, so a release today would be `simplemd_0.1.0_aarch64.dmg`
-tagged `v0.1.0` — which contradicts every other reference to the project's
-version. Left alone deliberately: renumbering is a product call, not a
-packaging one.
+Settled by user decision, 2026-09-15. The v1.1–v1.9 numbering used throughout
+CLAUDE.md is a **feature-milestone** series, not a release series; releases are
+0.x, and the v1.9 milestone ships as 0.1.9.
+
+Aligned across `package.json`, `src-tauri/Cargo.toml`,
+`src-tauri/tauri.conf.json`, `package-lock.json` and `src-tauri/Cargo.lock`. The
+first release is therefore `simplemd_0.1.9_aarch64.dmg` tagged `v0.1.9`.
+
+`tauri.conf.json` is the one that matters — the DMG filename and the release
+tag both derive from it. Bump it there first, then keep the other four in step;
+nothing enforces that automatically.
 
 ## Evidence
 

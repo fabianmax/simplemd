@@ -15,7 +15,7 @@
 # staple a standalone binary, so the CLI ships within the bundle and Homebrew
 # symlinks it onto PATH. This is BBEdit's shape.
 cask "simplemd" do
-  version "0.0.0"                       # TODO: match the release tag
+  version "0.1.9"
   sha256 "0" * 64                       # TODO: shasum -a 256 of the released DMG
 
   url "https://github.com/fabianmax/simplemd/releases/download/v#{version}/simplemd_#{version}_aarch64.dmg"

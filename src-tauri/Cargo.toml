@@ -1,6 +1,6 @@
 [package]
 name = "simplemd"
-version = "0.1.0"
+version = "0.1.9"
 description = "Opinionated macOS Markdown viewer/editor for working alongside coding agents"
 authors = ["Fabian Mueller"]
 edition = "2021"
