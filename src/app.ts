@@ -48,6 +48,8 @@ export class App {
   private browser: BrowserPanel;
   private browserToggle: HTMLButtonElement;
   private zoomPill: HTMLElement;
+  private previewToggle: HTMLButtonElement;
+  private mainRow: HTMLElement;
   private zoomTimer: ReturnType<typeof setTimeout> | null = null;
   private zoom = DEFAULT_ZOOM;
   private diffCount: HTMLElement;
@@ -68,15 +70,27 @@ export class App {
     this.tabStrip = document.createElement("div");
     this.tabStrip.className = "tab-strip";
     column.appendChild(this.tabStrip);
-    // Pinned chrome, not a tab: the strip stays visible with zero tabs, because
-    // that is exactly when you need the browser to go find a file.
+    // Anchored to the window's left edge, NOT to the tab strip: riding in the
+    // strip meant the button slid right by the panel width whenever the browser
+    // opened. It is absolutely positioned over main-row, so it holds the same
+    // spot in both states; the browser header and the strip reserve room for it.
     this.browserToggle = document.createElement("button");
-    this.browserToggle.className = "strip-btn";
+    this.browserToggle.className = "chrome-btn browser-toggle";
     this.browserToggle.title = "Toggle file browser (\u2318\u21e7B)";
     this.browserToggle.setAttribute("aria-label", "Toggle file browser");
     this.browserToggle.setAttribute("aria-pressed", "false");
-    this.browserToggle.appendChild(svgIcon(ICON.sidebar, "strip-btn-icon"));
+    this.browserToggle.appendChild(svgIcon(ICON.sidebar, "chrome-btn-icon"));
     this.browserToggle.onclick = () => void this.toggleBrowser();
+    mainRow.appendChild(this.browserToggle);
+    this.mainRow = mainRow;
+    // 13: the same switch as ⌘E, reachable without the menu bar. Lit when raw
+    // source is showing, exactly like the browser toggle is lit when open.
+    this.previewToggle = document.createElement("button");
+    this.previewToggle.className = "chrome-btn preview-toggle";
+    this.previewToggle.title = "Toggle raw source (\u2318E)";
+    this.previewToggle.setAttribute("aria-label", "Toggle raw source");
+    this.previewToggle.appendChild(svgIcon(ICON.code, "chrome-btn-icon"));
+    this.previewToggle.onclick = () => this.togglePreview();
     this.conflictBar = this.buildConflictBar(column);
     this.emptyState = document.createElement("div");
     this.emptyState.className = "empty-state";
@@ -265,12 +279,21 @@ export class App {
 
   private syncBrowserToggle() {
     const on = this.browser.isOpen;
-    this.browserToggle.classList.toggle("strip-btn-on", on);
+    this.browserToggle.classList.toggle("chrome-btn-on", on);
     this.browserToggle.setAttribute("aria-pressed", String(on));
+    // The strip only needs to clear the floating toggle when no panel does.
+    this.mainRow.classList.toggle("browser-open", on);
+  }
+
+  private syncPreviewToggle() {
+    const raw = !this.previewOn;
+    this.previewToggle.classList.toggle("chrome-btn-on", raw);
+    this.previewToggle.setAttribute("aria-pressed", String(raw));
   }
 
   togglePreview() {
     this.previewOn = !this.previewOn;
+    this.syncPreviewToggle();
     this.view.dispatch({
       effects: previewCompartment.reconfigure(
         this.previewOn ? previewExtension() : [],
@@ -638,9 +661,9 @@ export class App {
     this.emptyState.hidden = this.tabs.length > 0;
     this.conflictBar.hidden = !tab?.conflict;
     this.syncBrowserToggle();
+    this.syncPreviewToggle();
 
     this.tabStrip.replaceChildren(
-      this.browserToggle,
       ...this.tabs.map((t, i) => {
         const el = document.createElement("div");
         el.className =
@@ -669,7 +692,10 @@ export class App {
         };
         return el;
       }),
+      this.previewToggle,
     );
+    // Nothing to switch with no document open.
+    this.previewToggle.hidden = this.tabs.length === 0;
 
     const changes = tab?.diff ? changeCount(tab.diff) : 0;
     this.diffPill.hidden = changes === 0;

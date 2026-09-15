@@ -328,6 +328,11 @@ editor column right of the browser, so tabs no longer span the panel.
 it is Paragraph in the Format menu. muda cannot express a main-row "+", so the
 menu carries ⌘= and a capture-phase keydown catches ⌘+ on layouts that have that
 key (AppKit consumes matched equivalents, so the two cannot double-step).
+**v1.6.1**: browser toggle anchored to the window's left edge (it used to ride
+in the tab strip and slide right by the panel width); raw/rendered switch as a
+button at the right of the strip, lit in raw mode. `tests/app.test.ts` exists
+now — mock `../src/ipc` + `@tauri-apps/api/webview` and CM6 runs under jsdom, so
+App-level chrome IS headlessly testable; put App changes there from the start.
 Signing/notarization/Homebrew cask deferred by user decision 2026-09-01
 until a GitHub repo exists; app runs unsigned locally meanwhile.
 

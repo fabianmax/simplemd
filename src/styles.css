@@ -279,7 +279,7 @@ html, body, #app {
 .diff-pill button:hover { background: var(--band); }
 
 /* --- file browser ------------------------------------------------------------ */
-.main-row { display: flex; flex: 1; min-height: 0; }
+.main-row { display: flex; flex: 1; min-height: 0; position: relative; }
 /* Everything document-shaped stacks here, to the RIGHT of the browser: tabs,
    conflict bar, empty state, editor, pill, status bar. Positioned, so those
    last three anchor to the editor rather than to the window. */
@@ -319,7 +319,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 6px 8px 6px 0;
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
 }
@@ -378,24 +378,35 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .browser-pick:hover { background: var(--band); }
 
-/* Pinned strip chrome: sticky so it survives horizontal tab overflow. */
-.strip-btn {
-  position: sticky;
-  left: 0;
+.chrome-btn {
   flex: none;
   display: flex;
   align-items: center;
   border: none;
   border-radius: 5px;
-  margin: 3px 2px 0 4px;
   padding: 3px 5px;
   color: var(--fg-dim);
-  background: linear-gradient(var(--band), var(--band)), var(--bg);
+  background: transparent;
   cursor: pointer;
 }
-.strip-btn:hover { color: var(--fg); }
-.strip-btn-on { color: var(--accent); }
-.strip-btn-icon { width: 15px; height: 15px; }
+.chrome-btn:hover { color: var(--fg); background: var(--band); }
+.chrome-btn-on { color: var(--accent); }
+.chrome-btn-icon { width: 15px; height: 15px; }
+.chrome-btn[hidden] { display: none; }
+
+/* Anchored to the window, not to a panel: this button holds the same spot
+   whether the browser is open or closed. Both neighbours reserve room for it. */
+.browser-toggle {
+  position: absolute;
+  left: 5px;
+  top: 4px;
+  z-index: 12;
+}
+.browser-header { padding-left: 32px; }
+/* Only the strip that actually starts at the window edge needs the inset —
+   with the browser open the panel is already holding that space. */
+.main-row:not(.browser-open) .tab-strip { padding-left: 28px; }
+.preview-toggle { margin: 3px 6px 0 auto; }
 
 /* --- v1.4 feedback: tabs, pill, status bar --------------------------------- */
 .tab {
