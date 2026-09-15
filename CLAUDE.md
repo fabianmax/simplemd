@@ -345,8 +345,15 @@ Signing/notarization/Homebrew cask deferred by user decision 2026-09-01
 until a GitHub repo exists; app runs unsigned locally meanwhile.
 
 Open polish debt: diff visuals (user: "not 100% appealing" — colors,
-deletion carets, pill), app icon, DMG (needs Finder-automation permission
+deletion carets, pill), DMG (needs Finder-automation permission
 or the non-styled path).
+
+App icon: done (v1.9). `assets/icon.svg` is the master — a Markdown heading
+with the caret parked after it, ink #1d1d1f on white with the accent as the
+caret. White squircle 824x824 on Apple's macOS grid (r = 185.4). Chosen from
+six directions on the criterion that it had to survive a 16pt Finder row.
+Regenerate the bundle with `npx tauri icon assets/icon-1024.png`, then delete
+the icons/android and icons/ios output — this is a macOS-only app.
 
 ## How we build this: agentic-first
 

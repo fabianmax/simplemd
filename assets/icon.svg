@@ -1,0 +1,21 @@
+<!-- simplemd app icon, 1024 master. The white squircle is 824x824 on Apple's
+     macOS icon grid (r = 185.4), leaving the 100px margin the system expects;
+     the hairline edge keeps a white icon defined against a white background.
+     The mark occupies 60% of the squircle and is optically centred in it.
+     Regenerate the bundle with:  npx tauri icon assets/icon-1024.png  -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect x="100" y="100" width="824" height="824" rx="185.4" fill="#ffffff"/>
+  <rect x="102" y="102" width="820" height="820" rx="183.4" fill="none"
+        stroke="#e4e4ea" stroke-width="4"/>
+  <g transform="translate(133 133) scale(7.58) translate(-2.5 -5)">
+    <g fill="#1d1d1f">
+      <rect x="20" y="42" width="48" height="8.5" rx="4.25"/>
+      <rect x="20" y="60" width="48" height="8.5" rx="4.25"/>
+      <g transform="translate(8 0) skewX(-10)">
+        <rect x="34" y="24" width="8.5" height="62" rx="4.25"/>
+        <rect x="52" y="24" width="8.5" height="62" rx="4.25"/>
+      </g>
+    </g>
+    <rect x="76" y="24" width="9" height="62" rx="4.5" fill="#0969da"/>
+  </g>
+</svg>
