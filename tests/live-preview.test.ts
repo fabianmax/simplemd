@@ -76,6 +76,22 @@ describe("decorations", () => {
     expect(decosIn(s, 0, 3)).toContain("lp-hidden");
     expect(decosIn(s, 5, 14)).not.toContain("lp-hidden");
   });
+  it("chips inline code whether or not the line is revealed", () => {
+    const doc = "a `x` b\nplain";
+    // cursor off the line: markers hidden, chip present
+    const away = stateAt(doc, doc.length - 1);
+    expect(decosIn(away, 2, 5)).toContain("lp-inline-code");
+    expect(decosIn(away, 2, 5)).toContain("lp-hidden");
+    // cursor on the line: backticks come back, chip must NOT blink off
+    const on = stateAt(doc, 0);
+    expect(decosIn(on, 2, 5)).toContain("lp-inline-code");
+    expect(decosIn(on, 2, 5)).not.toContain("lp-hidden");
+  });
+  it("does not chip fenced code (same lezer tag, different treatment)", () => {
+    const doc = "```\ny\n```\n\ncursor";
+    const s = stateAt(doc, doc.length - 1);
+    expect(decosIn(s, 0, 10)).not.toContain("lp-inline-code");
+  });
 });
 
 describe("checkbox toggle (Obsidian cursor-jump regression guard)", () => {

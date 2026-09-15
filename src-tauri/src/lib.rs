@@ -1,4 +1,5 @@
 pub mod commands;
+mod git;
 pub mod menu;
 pub mod watcher;
 
@@ -43,6 +44,7 @@ pub fn run() {
             commands::unwatch_file,
             commands::write_recovery,
             take_pending_open,
+            git::git_info,
         ])
         .setup(|app| {
             let handle = app.handle();

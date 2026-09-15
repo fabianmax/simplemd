@@ -23,6 +23,16 @@ export interface DirEntry {
 }
 export const listDir = (path: string) => invoke<DirEntry[]>("list_dir", { path });
 export const takePendingOpen = () => invoke<string[]>("take_pending_open");
+export interface GitEntry {
+  path: string;
+  /** "M" changed, "A" staged/added, "?" untracked. */
+  state: string;
+}
+export interface GitInfo {
+  branch: string | null;
+  entries: GitEntry[];
+}
+export const gitInfo = (dir: string) => invoke<GitInfo>("git_info", { dir });
 export const watchFile = (path: string) => invoke<void>("watch_file", { path });
 export const unwatchFile = (path: string) => invoke<void>("unwatch_file", { path });
 export const writeRecovery = (fileName: string, content: string) =>

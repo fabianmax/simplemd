@@ -15,6 +15,9 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { SwitcherUI } from "./switcher-ui";
 import { docStats, formatStats } from "./stats";
 import { BrowserPanel } from "./browser";
+import { TocPanel, extractHeadings, activeHeadingIndex } from "./toc";
+import { ICON, svgIcon } from "./icons";
+import { DEFAULT_ZOOM, loadZoom, saveZoom, stepZoom, zoomKeyDirection, zoomLabel } from "./zoom";
 
 export interface Tab {
   /** null = untitled scratch tab, gets a path on first save */
@@ -44,32 +47,94 @@ export class App {
   private statusBar: HTMLElement;
   private statsTimer: ReturnType<typeof setTimeout> | null = null;
   private browser: BrowserPanel;
+  private browserToggle: HTMLButtonElement;
+  private zoomPill: HTMLElement;
+  private previewToggle: HTMLButtonElement;
+  private mainRow: HTMLElement;
+  private zoomTimer: ReturnType<typeof setTimeout> | null = null;
+  private zoom = DEFAULT_ZOOM;
+  private branch: string | null = null;
+  private toc: TocPanel;
+  private tocToggle: HTMLButtonElement;
+  private tocTimer: ReturnType<typeof setTimeout> | null = null;
   private diffCount: HTMLElement;
   private diffNav = 0;
 
   constructor(parent: HTMLElement) {
-    this.tabStrip = document.createElement("div");
-    this.tabStrip.className = "tab-strip";
-    this.tabStrip.hidden = true;
-    parent.appendChild(this.tabStrip);
-    this.conflictBar = this.buildConflictBar(parent);
-    this.emptyState = document.createElement("div");
-    this.emptyState.className = "empty-state";
-    this.emptyState.innerHTML =
-      "<div><h2>simplemd</h2><p>Drop a Markdown file here, or press <kbd>⌘O</kbd></p></div>";
-    parent.appendChild(this.emptyState);
+    // Layout: the browser is full-height at the left; everything that belongs to
+    // the document — tabs, conflict bar, empty state, editor, pill, status — is
+    // stacked in a column to its right, so tabs never span the browser.
     const mainRow = document.createElement("div");
     mainRow.className = "main-row";
     parent.appendChild(mainRow);
     this.browser = new BrowserPanel(mainRow, (path) => void this.openAnyPath(path));
+    const column = document.createElement("div");
+    column.className = "editor-column";
+    mainRow.appendChild(column);
+    // Right of the column, so the tab strip still spans the editor only.
+    this.toc = new TocPanel(mainRow, (pos) => this.goTo(pos));
+
+    this.tabStrip = document.createElement("div");
+    this.tabStrip.className = "tab-strip";
+    column.appendChild(this.tabStrip);
+    // Anchored to the window's left edge, NOT to the tab strip: riding in the
+    // strip meant the button slid right by the panel width whenever the browser
+    // opened. It is absolutely positioned over main-row, so it holds the same
+    // spot in both states; the browser header and the strip reserve room for it.
+    this.browserToggle = document.createElement("button");
+    this.browserToggle.className = "chrome-btn browser-toggle";
+    this.browserToggle.title = "Toggle file browser (\u2318\u21e7B)";
+    this.browserToggle.setAttribute("aria-label", "Toggle file browser");
+    this.browserToggle.setAttribute("aria-pressed", "false");
+    this.browserToggle.appendChild(svgIcon(ICON.sidebar, "chrome-btn-icon"));
+    this.browserToggle.onclick = () => void this.toggleBrowser();
+    mainRow.appendChild(this.browserToggle);
+    this.mainRow = mainRow;
+    // 13: the same switch as ⌘E, reachable without the menu bar. Lit when raw
+    // source is showing, exactly like the browser toggle is lit when open.
+    this.previewToggle = document.createElement("button");
+    this.previewToggle.className = "chrome-btn preview-toggle";
+    this.previewToggle.title = "Toggle raw source (\u2318E)";
+    this.previewToggle.setAttribute("aria-label", "Toggle raw source");
+    this.previewToggle.appendChild(svgIcon(ICON.code, "chrome-btn-icon"));
+    this.previewToggle.onclick = () => this.togglePreview();
+    this.tocToggle = document.createElement("button");
+    this.tocToggle.className = "chrome-btn toc-toggle";
+    this.tocToggle.title = "Toggle outline (\u2318\u21e7O)";
+    this.tocToggle.setAttribute("aria-label", "Toggle outline");
+    this.tocToggle.appendChild(svgIcon(ICON.outline, "chrome-btn-icon"));
+    this.tocToggle.onclick = () => this.toggleToc();
+    this.conflictBar = this.buildConflictBar(column);
+    this.emptyState = document.createElement("div");
+    this.emptyState.className = "empty-state";
+    this.emptyState.innerHTML =
+      "<div><h2>simplemd</h2><p>Drop a Markdown file here, or press <kbd>⌘O</kbd></p></div>";
+    column.appendChild(this.emptyState);
     const editorHost = document.createElement("div");
     editorHost.className = "editor-host";
-    mainRow.appendChild(editorHost);
-    ({ pill: this.diffPill, count: this.diffCount } = this.buildDiffPill(parent));
+    column.appendChild(editorHost);
+    ({ pill: this.diffPill, count: this.diffCount } = this.buildDiffPill(column));
     this.statusBar = document.createElement("div");
     this.statusBar.className = "status-bar";
     this.statusBar.hidden = true;
-    parent.appendChild(this.statusBar);
+    column.appendChild(this.statusBar);
+    // After the diff pill in the DOM so CSS can lift it clear when both show.
+    this.zoomPill = document.createElement("div");
+    this.zoomPill.className = "zoom-pill";
+    this.zoomPill.hidden = true;
+    column.appendChild(this.zoomPill);
+    // Capture phase: the menu equivalents AppKit matches never reach here, so
+    // this only ever fires for the ones it cannot express (see zoomKeyDirection).
+    window.addEventListener(
+      "keydown",
+      (e) => {
+        const dir = zoomKeyDirection(e);
+        if (dir === 0) return;
+        e.preventDefault();
+        this.zoomBy(dir);
+      },
+      { capture: true },
+    );
     // Empty tab-strip area double-click opens a new tab (user feedback).
     this.tabStrip.ondblclick = (e) => {
       if (e.target === this.tabStrip) this.newUntitledTab();
@@ -175,6 +240,12 @@ export class App {
       if (u.docChanged) {
         if (this.statsTimer) clearTimeout(this.statsTimer);
         this.statsTimer = setTimeout(() => this.renderStats(), 300);
+        // The tree walk is the expensive half, so rebuild on a debounce...
+        if (this.tocTimer) clearTimeout(this.tocTimer);
+        this.tocTimer = setTimeout(() => this.renderToc(), 300);
+      } else if (u.selectionSet) {
+        // ...but following the cursor only moves a class.
+        this.syncTocActive();
       }
       if (u.docChanged && !this.reloading && tab && !tab.dirty) {
         tab.dirty = true;
@@ -183,14 +254,118 @@ export class App {
     });
   }
 
+  /** Read-only git context: the branch in the status bar, markers in the browser.
+   *  Refreshed on the events that can change it — never polled. */
+  private async refreshGit(withBrowser = false) {
+    const dir = this.activeTab?.path?.replace(/\/[^/]+$/, "") ?? null;
+    let branch: string | null = null;
+    if (dir) {
+      try {
+        branch = (await ipc.gitInfo(dir)).branch;
+      } catch {
+        branch = null;
+      }
+    }
+    if (branch !== this.branch) {
+      this.branch = branch;
+      this.renderStats();
+    }
+    // Only on the events that can actually change a file's state: one subprocess
+    // per rendered level is fine after a save, wasteful on every tab switch.
+    if (withBrowser) await this.browser.refreshGit();
+  }
+
   private renderStats() {
     const tab = this.activeTab;
     this.statusBar.hidden = !tab;
-    if (tab) this.statusBar.textContent = formatStats(docStats(this.view.state.doc.toString()));
+    if (!tab) return;
+    const stats = formatStats(docStats(this.view.state.doc.toString()));
+    this.statusBar.textContent = this.branch ? `\u2387 ${this.branch} \u00b7 ${stats}` : stats;
+  }
+
+  zoomBy(dir: 1 | -1) {
+    this.applyZoom(stepZoom(this.zoom, dir));
+  }
+
+  resetZoom() {
+    this.applyZoom(DEFAULT_ZOOM);
+  }
+
+  private applyZoom(zoom: number, flash = true) {
+    this.zoom = zoom;
+    this.view.dom.style.setProperty("--zoom", String(zoom));
+    // Unlike the vw ramp, this font-size change does NOT come from a window
+    // resize, so CM6's DOMObserver will not remeasure on its own.
+    this.view.requestMeasure();
+    saveZoom(zoom);
+    if (flash) this.flashZoom();
+  }
+
+  /** The size is only worth showing while it is changing. */
+  private flashZoom() {
+    this.zoomPill.textContent = zoomLabel(this.zoom);
+    this.zoomPill.hidden = false;
+    if (this.zoomTimer) clearTimeout(this.zoomTimer);
+    this.zoomTimer = setTimeout(() => {
+      this.zoomPill.hidden = true;
+      this.zoomTimer = null;
+    }, 1400);
+  }
+
+  /** The menu item (\u2318\u21e7B) and the tab-strip button share this path. */
+  async toggleBrowser() {
+    const dir = this.activeTab?.path?.replace(/\/[^/]+$/, "") ?? null;
+    await this.browser.toggle(dir, this.activeTab?.path ?? null);
+    this.syncBrowserToggle();
+  }
+
+  private syncBrowserToggle() {
+    const on = this.browser.isOpen;
+    this.browserToggle.classList.toggle("chrome-btn-on", on);
+    this.browserToggle.setAttribute("aria-pressed", String(on));
+    // The strip only needs to clear the floating toggle when no panel does.
+    this.mainRow.classList.toggle("browser-open", on);
+  }
+
+  toggleToc() {
+    const open = this.toc.toggle();
+    this.tocToggle.classList.toggle("chrome-btn-on", open);
+    this.tocToggle.setAttribute("aria-pressed", String(open));
+    if (open) this.renderToc();
+  }
+
+  /** Rebuild the outline. Cheap enough to run on a debounce, but never on a
+   *  keystroke: the tree walk is the expensive half. */
+  renderToc() {
+    if (!this.toc.isOpen) return;
+    const headings = extractHeadings(this.view.state);
+    this.toc.render(headings, activeHeadingIndex(headings, this.view.state.selection.main.head));
+  }
+
+  private syncTocActive() {
+    if (!this.toc.isOpen) return;
+    const headings = extractHeadings(this.view.state);
+    this.toc.setActive(activeHeadingIndex(headings, this.view.state.selection.main.head));
+  }
+
+  /** Jump from the outline: move the cursor there and put the line at the top. */
+  goTo(pos: number) {
+    this.view.dispatch({
+      selection: EditorSelection.cursor(pos),
+      effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 8 }),
+    });
+    this.view.focus();
+  }
+
+  private syncPreviewToggle() {
+    const raw = !this.previewOn;
+    this.previewToggle.classList.toggle("chrome-btn-on", raw);
+    this.previewToggle.setAttribute("aria-pressed", String(raw));
   }
 
   togglePreview() {
     this.previewOn = !this.previewOn;
+    this.syncPreviewToggle();
     this.view.dispatch({
       effects: previewCompartment.reconfigure(
         this.previewOn ? previewExtension() : [],
@@ -218,6 +393,7 @@ export class App {
       if (tab && !tab.diff) tab.baseline = this.view.state.doc.toString();
     });
     await this.drainPending();
+    this.applyZoom(loadZoom(), false);
     this.renderChrome();
   }
 
@@ -240,8 +416,15 @@ export class App {
     } else if (id === "quick-switch") {
       await this.openSwitcher();
     } else if (id === "toggle-browser") {
-      const dir = this.activeTab?.path?.replace(/\/[^/]+$/, "") ?? null;
-      await this.browser.toggle(dir, this.activeTab?.path ?? null);
+      await this.toggleBrowser();
+    } else if (id === "toggle-toc") {
+      this.toggleToc();
+    } else if (id === "zoom-in") {
+      this.zoomBy(1);
+    } else if (id === "zoom-out") {
+      this.zoomBy(-1);
+    } else if (id === "zoom-reset") {
+      this.resetZoom();
     } else if (id.startsWith("recent:")) {
       await this.openPath(id.slice("recent:".length));
     } else if (id.startsWith("fmt:")) {
@@ -293,6 +476,8 @@ export class App {
     if (index < 0 || index >= this.tabs.length) return;
     this.stashActive();
     this.active = index;
+    void this.refreshGit(); // branch only: the tab moved, no file changed
+    this.renderToc(); // a different document means a different outline
     const tab = this.tabs[index];
     this.view.setState(tab.state);
     if (tab.diff && changeCount(tab.diff) > 0) {
@@ -368,6 +553,7 @@ export class App {
     tab.diff = null;
     this.view.dispatch({ effects: clearDiff.of(null) });
     this.renderChrome();
+    void this.refreshGit(true); // the file's git state just changed
   }
 
   // --- the agent loop ---------------------------------------------------------------
@@ -377,6 +563,7 @@ export class App {
     const tab = this.tabs[index];
     if (!tab) return;
     const isActive = index === this.active;
+    void this.refreshGit(true); // an external write changes git state too
     const dirty = isActive
       ? tab.dirty
       : tab.dirty; // stored per-tab; view state only diverges in doc/selection
@@ -550,8 +737,9 @@ export class App {
   renderChrome() {
     const tab = this.activeTab;
     this.emptyState.hidden = this.tabs.length > 0;
-    this.tabStrip.hidden = this.tabs.length === 0;
     this.conflictBar.hidden = !tab?.conflict;
+    this.syncBrowserToggle();
+    this.syncPreviewToggle();
 
     this.tabStrip.replaceChildren(
       ...this.tabs.map((t, i) => {
@@ -580,10 +768,14 @@ export class App {
         el.onauxclick = (e) => {
           if (e.button === 1) void this.closeTab(i);
         };
-        this.tabStrip.appendChild(el);
         return el;
       }),
+      this.previewToggle,
+      this.tocToggle,
     );
+    // Nothing to switch, and nothing to outline, with no document open.
+    this.previewToggle.hidden = this.tabs.length === 0;
+    this.tocToggle.hidden = this.tabs.length === 0;
 
     const changes = tab?.diff ? changeCount(tab.diff) : 0;
     this.diffPill.hidden = changes === 0;

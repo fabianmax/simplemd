@@ -14,6 +14,7 @@ import { TableWidget, CheckboxWidget } from "./widgets";
 
 const hideMark = Decoration.mark({ class: "lp-hidden" });
 const linkMark = Decoration.mark({ class: "lp-link" });
+const inlineCodeMark = Decoration.mark({ class: "lp-inline-code" });
 const fenceLine = Decoration.line({ class: "lp-fence-line" });
 const codeLine = Decoration.line({ class: "lp-code-line" });
 const quoteLine = Decoration.line({ class: "lp-quote-line" });
@@ -87,6 +88,13 @@ export function buildDecorations(state: EditorState): DecorationSet {
         case "EmphasisMark":
         case "StrikethroughMark": {
           if (!lineRevealed(node.from)) deco.push(hideMark.range(node.from, node.to));
+          return undefined;
+        }
+        case "InlineCode": {
+          // Reveal-independent, exactly like the fence line styling: the chip
+          // must not blink off when the cursor enters the line. Background and
+          // inline padding only — neither changes the line box height.
+          deco.push(inlineCodeMark.range(node.from, node.to));
           return undefined;
         }
         case "CodeMark": {

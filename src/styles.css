@@ -5,7 +5,7 @@
   --fg-dim: #86868b;
   --accent: #0969da;
   --band: rgba(0, 0, 0, 0.045);
-  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --mono: Menlo, "SF Mono", ui-monospace, monospace;
   --syn-keyword: #cf222e;
   --syn-string: #0a3069;
   --syn-number: #0550ae;
@@ -44,7 +44,13 @@ html, body, #app {
   max-width: 76ch;
   margin: 0 auto;
   caret-color: var(--fg);
-  font-size: 15px;
+  /* Two independent factors:
+     - the window ramp: scales with the WINDOW, not the editor pane, because
+       container units (cqi on .editor-host) would resize the text every time
+       the file browser is toggled. 13.5px at an 800px window, 16.5px at 1600px.
+     - --zoom: the reader's own ⌘= / ⌘- step, set on .cm-editor by app.ts.
+     max-width above is in `ch`, so the measure widens with both. */
+  font-size: calc(clamp(13px, 0.375vw + 10.5px, 17.5px) * var(--zoom, 1));
   line-height: 1.6;
 }
 .cm-editor .cm-line { padding: 0 24px; }
@@ -59,20 +65,34 @@ html, body, #app {
 .lp-hidden { font-size: 0.01em; opacity: 0; }
 
 /* constant (reveal-independent) line styling — heights never shift */
-.lp-code-line { background: var(--band); font-family: var(--mono); font-size: 0.92em; }
+/* No font-size here: t.monospace (highlight.ts) already sizes CodeText, and
+   @lezer/markdown tags InlineCode AND CodeText the same, so a size on the
+   line compounds with the span's — that is why fenced code read tiny. */
+.lp-code-line { background: var(--band); font-family: var(--mono); }
 .lp-fence-line { color: var(--fg-dim); }
 .lp-quote-line {
   border-left: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+/* Inline code reads as a chip. Cannot be done in highlight.ts: @lezer/markdown
+   gives InlineCode and CodeText the same t.monospace tag, so a rule there would
+   tint every fenced line too. */
+.lp-inline-code {
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  border-radius: 4px;
+  padding: 0.08em 0.3em;
+}
+
 .lp-checkbox { cursor: pointer; color: var(--accent); }
 .lp-checkbox.lp-checked { color: var(--fg-dim); }
 
-.lp-table { padding: 2px 0; }
-.lp-table table { border-collapse: collapse; font-size: 0.95em; }
+/* overflow-x rather than a squeezed layout: macOS overlay scrollbars take no
+   layout height, so the widget's measured height is unchanged. */
+.lp-table { padding: 2px 0; overflow-x: auto; }
+.lp-table table { border-collapse: collapse; }
 .lp-table th, .lp-table td {
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
-  padding: 3px 10px;
+  padding: 6px 12px;
   text-align: left;
 }
 .lp-table th { background: var(--band); }
@@ -124,6 +144,13 @@ html, body, #app {
 /* --- tab strip -------------------------------------------------------------- */
 .tab-strip {
   display: flex;
+  align-items: center;
+  min-height: 28px;
+  /* Above .empty-state (z-index 5), which is inset:0 over the whole app and
+     would otherwise bury the pinned browser toggle whenever no file is open —
+     which is precisely when the browser is needed. */
+  position: relative;
+  z-index: 6;
   gap: 1px;
   background: var(--band);
   border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
@@ -252,10 +279,33 @@ html, body, #app {
 .diff-pill button:hover { background: var(--band); }
 
 /* --- file browser ------------------------------------------------------------ */
-.main-row { display: flex; flex: 1; min-height: 0; }
+.main-row { display: flex; flex: 1; min-height: 0; position: relative; }
+/* Everything document-shaped stacks here, to the RIGHT of the browser: tabs,
+   conflict bar, empty state, editor, pill, status bar. Positioned, so those
+   last three anchor to the editor rather than to the window. */
+.editor-column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
 .main-row .editor-host { flex: 1; }
+.browser-resizer {
+  flex: none;
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.browser-resizer:hover { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.browser-resizer[hidden] { display: none; }
+/* Keep the cursor and kill text selection for the whole drag, not just over
+   the 4px handle. */
+body.resizing { cursor: col-resize; user-select: none; }
 .browser {
-  width: 220px;
+  width: 220px; /* first paint only — BrowserPanel sets the stored width inline */
   flex: none;
   display: flex;
   flex-direction: column;
@@ -269,7 +319,7 @@ html, body, #app {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 6px 8px 6px 0;
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
 }
@@ -280,23 +330,97 @@ html, body, #app {
 }
 .browser-header button:hover { background: var(--band); color: var(--fg); }
 .browser-tree { overflow-y: auto; flex: 1; padding: 4px 0; }
+/* Indentation lives on the level wrapper, not on each row, so nesting reads as
+   a guide line instead of as guessed whitespace. */
+.browser-level .browser-level {
+  margin-left: 15px;
+  border-left: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
 .browser-row {
-  padding: 5px 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
   cursor: default;
   color: var(--fg-dim);
-  line-height: 1.35;
+  line-height: 1.5;
   border-radius: 5px;
   margin: 0 4px;
 }
+.browser-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-chevron {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  opacity: 0.5;
+  transition: transform 0.12s ease;
+}
+.browser-row.browser-open > .browser-chevron { transform: rotate(90deg); }
+.browser-icon { width: 15px; height: 15px; flex: none; opacity: 0.7; }
+/* The only colour code in the panel: blue = markdown, dim = everything else. */
+.browser-md .browser-icon { color: var(--accent); opacity: 0.9; }
 .browser-dir { font-weight: 600; color: var(--fg); }
 .browser-file { color: var(--fg-dim); }
 .browser-file.browser-md { color: var(--fg); }
 .browser-row:hover { background: var(--band); }
+.browser-row:hover > .browser-chevron { opacity: 0.85; }
 .browser-active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+/* Read-only review context: a dot, not a letter — the panel stays a browser. */
+.browser-git {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  margin-left: auto;
+  margin-right: 2px;
+}
+.browser-row[data-git="M"] .browser-git { background: #e5a50a; }
+.browser-row[data-git="A"] .browser-git { background: var(--accent); }
+.browser-row[data-git="?"] .browser-git { background: #2da44e; }
+.browser-row[data-git] .browser-name { color: var(--fg); }
+
 .browser-hint { padding: 12px; color: var(--fg-dim); }
+.browser-hint p { margin: 0 0 8px; }
+.browser-pick {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.browser-pick:hover { background: var(--band); }
+
+.chrome-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  border: none;
+  border-radius: 5px;
+  padding: 3px 5px;
+  color: var(--fg-dim);
+  background: transparent;
+  cursor: pointer;
+}
+.chrome-btn:hover { color: var(--fg); background: var(--band); }
+.chrome-btn-on { color: var(--accent); }
+.chrome-btn-icon { width: 15px; height: 15px; }
+.chrome-btn[hidden] { display: none; }
+
+/* Anchored to the window, not to a panel: this button holds the same spot
+   whether the browser is open or closed. Both neighbours reserve room for it. */
+.browser-toggle {
+  position: absolute;
+  left: 5px;
+  top: 4px;
+  z-index: 12;
+}
+.browser-header { padding-left: 32px; }
+/* Only the strip that actually starts at the window edge needs the inset —
+   with the browser open the panel is already holding that space. */
+.main-row:not(.browser-open) .tab-strip { padding-left: 28px; }
+.preview-toggle { margin: 3px 6px 0 auto; }
 
 /* --- v1.4 feedback: tabs, pill, status bar --------------------------------- */
 .tab {
@@ -329,6 +453,65 @@ html, body, #app {
 }
 .status-bar[hidden] { display: none; }
 
+/* Transient: only on screen while the size is actually changing. */
+.zoom-pill {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  z-index: 16;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--band) 70%, var(--bg));
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.zoom-pill[hidden] { display: none; }
+/* Lift clear of the diff pill when that one is showing (DOM order: pill first). */
+.diff-pill:not([hidden]) ~ .zoom-pill { bottom: 38px; }
+
 /* --- link hover affordance (v1.4.2) ------------------------------------------ */
 .lp-link { cursor: pointer; }
 .lp-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+/* --- outline ------------------------------------------------------------------ */
+.toc {
+  width: 210px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, var(--band) 60%, var(--bg));
+  font-size: 12.5px;
+  overflow: hidden;
+}
+.toc[hidden] { display: none; }
+.toc-header {
+  padding: 6px 10px;
+  font-weight: 600;
+  color: var(--fg-dim);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.toc-list { overflow-y: auto; flex: 1; padding: 4px 0; }
+.toc-row {
+  padding: 3px 8px;
+  margin: 0 4px;
+  border-radius: 5px;
+  color: var(--fg-dim);
+  line-height: 1.45;
+  cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Depth reads through weight, not through a second colour. */
+.toc-row[data-level="1"] { color: var(--fg); font-weight: 600; }
+.toc-row[data-level="2"] { color: var(--fg); }
+.toc-row:hover { background: var(--band); }
+.toc-active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--fg);
+}
+.toc-hint { padding: 12px 10px; color: var(--fg-dim); }
+

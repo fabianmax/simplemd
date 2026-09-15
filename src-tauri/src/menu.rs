@@ -104,6 +104,12 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
                 .build(app)?,
         )
         .item(
+            &MenuItemBuilder::new("Toggle Outline")
+                .id("toggle-toc")
+                .accelerator("CmdOrCtrl+Shift+O")
+                .build(app)?,
+        )
+        .item(
             &MenuItemBuilder::new("Quick Switch…")
                 .id("quick-switch")
                 .accelerator("CmdOrCtrl+P")
@@ -115,6 +121,24 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
                 .accelerator("CmdOrCtrl+E")
                 .build(app)?,
         )
+        .separator()
+        // muda maps Code::Equal to the character "=", and has no main-row
+        // "Plus", so on layouts with a dedicated + key (German ISO) ⌘+ never
+        // matches here — the frontend catches that case (see zoomKeyDirection).
+        // ⌘0 is not available for a reset: it is Paragraph in the Format menu.
+        .item(
+            &MenuItemBuilder::new("Increase Text Size")
+                .id("zoom-in")
+                .accelerator("CmdOrCtrl+Equal")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new("Decrease Text Size")
+                .id("zoom-out")
+                .accelerator("CmdOrCtrl+Minus")
+                .build(app)?,
+        )
+        .item(&MenuItemBuilder::new("Actual Size").id("zoom-reset").build(app)?)
         .build()?;
 
     Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &format_menu, &view_menu])

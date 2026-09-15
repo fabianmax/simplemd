@@ -311,6 +311,36 @@ external reloads highlight added words + deletion carets as view-only
 decorations, scroll-to-first-change, floating pill with count + ↑/↓ + dismiss
 (dismiss = new baseline). Own saves reset the baseline. 69 vitest + 8 cargo.
 **v1.3**: file browser (⌘⇧B) — lazy per-level listing, no index/vault.
+**v1.5**: visual batch (`docs/plans/v1.5-visual-batch.md`) — code font reads as
+code (Menlo stack; the 0.92em on the line was compounding with the 0.92em on
+the span, because @lezer/markdown gives InlineCode and CodeText the same tag),
+text scales with the window (`clamp` on `.cm-content`; the `76ch` measure
+widens with it), file browser gets SVG icons, a real tree with guide rules, and
+a toggle pinned to the tab strip sharing one path with ⌘⇧B.
+**v1.5.1** (usage feedback): inline code renders as a chip (a decoration, not a
+highlight rule — same lezer tag as fenced code), the browser is drag-resizable
+with the width remembered in localStorage (guarded: unavailable storage just
+means the default), and the layout moved tabs/conflict bar/pill/status into an
+editor column right of the browser, so tabs no longer span the panel.
+**v1.6**: reader-controlled text size. Default ramp lowered ~1.5px (13.5px at an
+800px window, 16.5px at 1600px); ⌘= / ⌘- step a fixed ladder (60-200%) shown for
+1.4s in a corner pill; remembered in localStorage. ⌘0 could not be the reset —
+it is Paragraph in the Format menu. muda cannot express a main-row "+", so the
+menu carries ⌘= and a capture-phase keydown catches ⌘+ on layouts that have that
+key (AppKit consumes matched equivalents, so the two cannot double-step).
+**v1.6.1**: browser toggle anchored to the window's left edge (it used to ride
+in the tab strip and slide right by the panel width); raw/rendered switch as a
+button at the right of the strip, lit in raw mode. `tests/app.test.ts` exists
+now — mock `../src/ipc` + `@tauri-apps/api/webview` and CM6 runs under jsdom, so
+App-level chrome IS headlessly testable; put App changes there from the start.
+**v1.7**: read-only git context — branch (or short sha when detached) in the
+status bar, change markers in the explorer. One Rust command shelling out to
+`git`; status scoped to one directory with `--untracked-files=normal` so an
+untracked subtree collapses instead of being walked. Refreshed on save and
+external writes only — never polled, and a tab switch refreshes the branch alone.
+**v1.8**: outline panel (⌘⇧O) right of the editor column. Headings come from the
+lezer tree, never a `^#+` scan — a "#" inside a fence is code. Rebuilt on a
+300ms doc debounce; cursor tracking only moves a class.
 Signing/notarization/Homebrew cask deferred by user decision 2026-09-01
 until a GitHub repo exists; app runs unsigned locally meanwhile.
 
