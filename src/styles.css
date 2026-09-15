@@ -475,3 +475,43 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* --- link hover affordance (v1.4.2) ------------------------------------------ */
 .lp-link { cursor: pointer; }
 .lp-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+/* --- outline ------------------------------------------------------------------ */
+.toc {
+  width: 210px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, var(--band) 60%, var(--bg));
+  font-size: 12.5px;
+  overflow: hidden;
+}
+.toc[hidden] { display: none; }
+.toc-header {
+  padding: 6px 10px;
+  font-weight: 600;
+  color: var(--fg-dim);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.toc-list { overflow-y: auto; flex: 1; padding: 4px 0; }
+.toc-row {
+  padding: 3px 8px;
+  margin: 0 4px;
+  border-radius: 5px;
+  color: var(--fg-dim);
+  line-height: 1.45;
+  cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Depth reads through weight, not through a second colour. */
+.toc-row[data-level="1"] { color: var(--fg); font-weight: 600; }
+.toc-row[data-level="2"] { color: var(--fg); }
+.toc-row:hover { background: var(--band); }
+.toc-active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--fg);
+}
+.toc-hint { padding: 12px 10px; color: var(--fg-dim); }
+

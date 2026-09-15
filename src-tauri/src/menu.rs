@@ -104,6 +104,12 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
                 .build(app)?,
         )
         .item(
+            &MenuItemBuilder::new("Toggle Outline")
+                .id("toggle-toc")
+                .accelerator("CmdOrCtrl+Shift+O")
+                .build(app)?,
+        )
+        .item(
             &MenuItemBuilder::new("Quick Switch…")
                 .id("quick-switch")
                 .accelerator("CmdOrCtrl+P")

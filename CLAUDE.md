@@ -333,6 +333,14 @@ in the tab strip and slide right by the panel width); raw/rendered switch as a
 button at the right of the strip, lit in raw mode. `tests/app.test.ts` exists
 now — mock `../src/ipc` + `@tauri-apps/api/webview` and CM6 runs under jsdom, so
 App-level chrome IS headlessly testable; put App changes there from the start.
+**v1.7**: read-only git context — branch (or short sha when detached) in the
+status bar, change markers in the explorer. One Rust command shelling out to
+`git`; status scoped to one directory with `--untracked-files=normal` so an
+untracked subtree collapses instead of being walked. Refreshed on save and
+external writes only — never polled, and a tab switch refreshes the branch alone.
+**v1.8**: outline panel (⌘⇧O) right of the editor column. Headings come from the
+lezer tree, never a `^#+` scan — a "#" inside a fence is code. Rebuilt on a
+300ms doc debounce; cursor tracking only moves a class.
 Signing/notarization/Homebrew cask deferred by user decision 2026-09-01
 until a GitHub repo exists; app runs unsigned locally meanwhile.
 

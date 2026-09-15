@@ -122,6 +122,57 @@ describe("window chrome", () => {
     expect(ipcStub.gitInfo).toHaveBeenCalledWith("/repo/deep");
   });
 
+  it("outlines the open document, right of the editor column", async () => {
+    ipcStub.readFile.mockResolvedValueOnce({
+      content: "# Title\n\ntext\n\n## Section\n\nmore\n",
+      hash: "h1",
+    });
+    await app.openPath("/docs/plan.md");
+    const toggle = root.querySelector<HTMLButtonElement>(".toc-toggle")!;
+    expect(toggle.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>(".toc")!.hidden).toBe(true);
+
+    toggle.click();
+    const panel = root.querySelector<HTMLElement>(".toc")!;
+    expect(panel.hidden).toBe(false);
+    expect(toggle.classList.contains("chrome-btn-on")).toBe(true);
+    // right of the editor column, so the tab strip still spans the editor only
+    expect(panel.previousElementSibling?.classList.contains("editor-column")).toBe(true);
+    expect([...panel.querySelectorAll(".toc-row")].map((r) => r.textContent)).toEqual([
+      "Title",
+      "Section",
+    ]);
+  });
+
+  it("jumps the cursor to the heading that was clicked", async () => {
+    const doc = "# Title\n\ntext\n\n## Section\n\nmore\n";
+    ipcStub.readFile.mockResolvedValueOnce({ content: doc, hash: "h1" });
+    await app.openPath("/docs/plan.md");
+    app.toggleToc();
+    const rows = root.querySelectorAll<HTMLElement>(".toc-row");
+    rows[1].click();
+    expect(app.view.state.selection.main.head).toBe(doc.indexOf("## Section"));
+  });
+
+  it("follows the cursor without rebuilding the list", async () => {
+    const doc = "# Title\n\ntext\n\n## Section\n\nmore\n";
+    ipcStub.readFile.mockResolvedValueOnce({ content: doc, hash: "h1" });
+    await app.openPath("/docs/plan.md");
+    app.toggleToc();
+    const rowsBefore = [...root.querySelectorAll(".toc-row")];
+    expect(rowsBefore[0].classList.contains("toc-active")).toBe(true);
+
+    app.view.dispatch({ selection: { anchor: doc.length - 1 } });
+    const rowsAfter = [...root.querySelectorAll(".toc-row")];
+    expect(rowsAfter[0]).toBe(rowsBefore[0]); // same elements
+    expect(rowsAfter[1].classList.contains("toc-active")).toBe(true);
+  });
+
+  it("keeps the outline closed until asked, and hides its button with no document", () => {
+    expect(root.querySelector<HTMLButtonElement>(".toc-toggle")!.hidden).toBe(true);
+    expect(root.querySelector<HTMLElement>(".toc")!.hidden).toBe(true);
+  });
+
   it("survives a tab re-render without losing either button", async () => {
     await app.openPath("/docs/plan.md");
     await app.toggleBrowser();

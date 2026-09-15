@@ -15,6 +15,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { SwitcherUI } from "./switcher-ui";
 import { docStats, formatStats } from "./stats";
 import { BrowserPanel } from "./browser";
+import { TocPanel, extractHeadings, activeHeadingIndex } from "./toc";
 import { ICON, svgIcon } from "./icons";
 import { DEFAULT_ZOOM, loadZoom, saveZoom, stepZoom, zoomKeyDirection, zoomLabel } from "./zoom";
 
@@ -53,6 +54,9 @@ export class App {
   private zoomTimer: ReturnType<typeof setTimeout> | null = null;
   private zoom = DEFAULT_ZOOM;
   private branch: string | null = null;
+  private toc: TocPanel;
+  private tocToggle: HTMLButtonElement;
+  private tocTimer: ReturnType<typeof setTimeout> | null = null;
   private diffCount: HTMLElement;
   private diffNav = 0;
 
@@ -67,6 +71,8 @@ export class App {
     const column = document.createElement("div");
     column.className = "editor-column";
     mainRow.appendChild(column);
+    // Right of the column, so the tab strip still spans the editor only.
+    this.toc = new TocPanel(mainRow, (pos) => this.goTo(pos));
 
     this.tabStrip = document.createElement("div");
     this.tabStrip.className = "tab-strip";
@@ -92,6 +98,12 @@ export class App {
     this.previewToggle.setAttribute("aria-label", "Toggle raw source");
     this.previewToggle.appendChild(svgIcon(ICON.code, "chrome-btn-icon"));
     this.previewToggle.onclick = () => this.togglePreview();
+    this.tocToggle = document.createElement("button");
+    this.tocToggle.className = "chrome-btn toc-toggle";
+    this.tocToggle.title = "Toggle outline (\u2318\u21e7O)";
+    this.tocToggle.setAttribute("aria-label", "Toggle outline");
+    this.tocToggle.appendChild(svgIcon(ICON.outline, "chrome-btn-icon"));
+    this.tocToggle.onclick = () => this.toggleToc();
     this.conflictBar = this.buildConflictBar(column);
     this.emptyState = document.createElement("div");
     this.emptyState.className = "empty-state";
@@ -228,6 +240,12 @@ export class App {
       if (u.docChanged) {
         if (this.statsTimer) clearTimeout(this.statsTimer);
         this.statsTimer = setTimeout(() => this.renderStats(), 300);
+        // The tree walk is the expensive half, so rebuild on a debounce...
+        if (this.tocTimer) clearTimeout(this.tocTimer);
+        this.tocTimer = setTimeout(() => this.renderToc(), 300);
+      } else if (u.selectionSet) {
+        // ...but following the cursor only moves a class.
+        this.syncTocActive();
       }
       if (u.docChanged && !this.reloading && tab && !tab.dirty) {
         tab.dirty = true;
@@ -309,6 +327,36 @@ export class App {
     this.mainRow.classList.toggle("browser-open", on);
   }
 
+  toggleToc() {
+    const open = this.toc.toggle();
+    this.tocToggle.classList.toggle("chrome-btn-on", open);
+    this.tocToggle.setAttribute("aria-pressed", String(open));
+    if (open) this.renderToc();
+  }
+
+  /** Rebuild the outline. Cheap enough to run on a debounce, but never on a
+   *  keystroke: the tree walk is the expensive half. */
+  renderToc() {
+    if (!this.toc.isOpen) return;
+    const headings = extractHeadings(this.view.state);
+    this.toc.render(headings, activeHeadingIndex(headings, this.view.state.selection.main.head));
+  }
+
+  private syncTocActive() {
+    if (!this.toc.isOpen) return;
+    const headings = extractHeadings(this.view.state);
+    this.toc.setActive(activeHeadingIndex(headings, this.view.state.selection.main.head));
+  }
+
+  /** Jump from the outline: move the cursor there and put the line at the top. */
+  goTo(pos: number) {
+    this.view.dispatch({
+      selection: EditorSelection.cursor(pos),
+      effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 8 }),
+    });
+    this.view.focus();
+  }
+
   private syncPreviewToggle() {
     const raw = !this.previewOn;
     this.previewToggle.classList.toggle("chrome-btn-on", raw);
@@ -369,6 +417,8 @@ export class App {
       await this.openSwitcher();
     } else if (id === "toggle-browser") {
       await this.toggleBrowser();
+    } else if (id === "toggle-toc") {
+      this.toggleToc();
     } else if (id === "zoom-in") {
       this.zoomBy(1);
     } else if (id === "zoom-out") {
@@ -427,6 +477,7 @@ export class App {
     this.stashActive();
     this.active = index;
     void this.refreshGit(); // branch only: the tab moved, no file changed
+    this.renderToc(); // a different document means a different outline
     const tab = this.tabs[index];
     this.view.setState(tab.state);
     if (tab.diff && changeCount(tab.diff) > 0) {
@@ -720,9 +771,11 @@ export class App {
         return el;
       }),
       this.previewToggle,
+      this.tocToggle,
     );
-    // Nothing to switch with no document open.
+    // Nothing to switch, and nothing to outline, with no document open.
     this.previewToggle.hidden = this.tabs.length === 0;
+    this.tocToggle.hidden = this.tabs.length === 0;
 
     const changes = tab?.diff ? changeCount(tab.diff) : 0;
     this.diffPill.hidden = changes === 0;
