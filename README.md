@@ -1,7 +1,14 @@
+<div align="center">
+
+<img src="assets/icon.svg" width="112" height="112" alt="">
+
 # simplemd
 
-A deliberately small macOS Markdown viewer/editor for working alongside coding
-agents.
+**A deliberately small macOS Markdown viewer/editor for working alongside coding agents.**
+
+macOS 11+ · Apple Silicon · MIT
+
+</div>
 
 ## Why
 
@@ -13,6 +20,8 @@ simplemd does one thing:
 
 > An agent writes a plan → you read it rendered → you fix the two wrong
 > assumptions in place → the agent picks it up.
+
+Every feature below earns its place against that loop, or it does not ship.
 
 ## What it does
 
@@ -31,22 +40,28 @@ simplemd does one thing:
 - **Byte-faithful** — the buffer is the source text; rendering is view-only
   decoration. Open + save is byte-for-byte identical, always. Your diffs stay
   clean.
-- Tabs, `⌘P` fuzzy quick-switch, a file browser (`⇧⌘B`) that is a browser and
-  not a vault, formatting hotkeys (`⌘B`/`⌘I`/`⌘K`, `⌘1–6`), dark mode.
+- **Built for code-adjacent documents** — fenced code, tables and task lists
+  are first-class. These are specs, not essays.
+- **Review context without the ceremony** — current git branch in the status
+  bar and change markers in the file browser, read-only. Committing is not
+  simplemd's job.
+- **Navigation** — tabs, `⌘P` fuzzy quick-switch, a file browser (`⇧⌘B`) that
+  is a browser and not a vault, an outline panel (`⇧⌘O`), reader-controlled
+  text size, and dark mode that follows the system.
 
 ## What it refuses to be
 
 No vault. No project setup. No plugins. No git client. No AI chat window.
-Open a file, edit, save — that is the whole onboarding. See `CLAUDE.md` for
-the full non-goals list; it is load-bearing.
+Open a file, edit, save — that is the whole onboarding. See [`CLAUDE.md`](CLAUDE.md)
+for the full non-goals list; it is load-bearing.
 
 ## Install
 
-Local builds, unsigned. Signing and notarization are wired up but not yet
-executed — that needs an Apple Developer ID, which this project does not have.
-Until then macOS treats the app as unidentified; right-click → Open the first
-time, or clear the quarantine flag with
-`xattr -d com.apple.quarantine /Applications/simplemd.app`.
+> **Unsigned.** Signing and notarization are wired up but have never been
+> executed — that needs an Apple Developer ID this project does not have. macOS
+> will treat the app as unidentified: right-click → Open the first time, or
+> clear the quarantine flag with
+> `xattr -d com.apple.quarantine /Applications/simplemd.app`.
 
 ```sh
 git clone https://github.com/fabianmax/simplemd && cd simplemd
@@ -62,8 +77,8 @@ and want the styled window.
 
 ### From the terminal
 
-The CLI ships inside the bundle (notarization cannot staple a standalone
-binary). Symlink it onto your `PATH`:
+The CLI ships inside the bundle — notarization cannot staple a standalone
+binary. Symlink it onto your `PATH`:
 
 ```sh
 ln -s /Applications/simplemd.app/Contents/Helpers/simplemd /usr/local/bin/simplemd
@@ -71,39 +86,51 @@ simplemd path/to/plan.md
 ```
 
 It opens in the already-running instance, in a new tab. `open -a simplemd
-path/to/plan.md` does the same thing without the symlink — the CLI routes
-through Launch Services either way, because command-line arguments grant no
-file access under sandboxing and a document-open does.
+path/to/plan.md` does the same without the symlink — the CLI routes through
+Launch Services either way, because command-line arguments grant no file access
+under sandboxing and a document-open does.
 
-`.md`/`.markdown` are registered file associations — Finder double-click and
+`.md`/`.markdown` are registered file associations, so Finder double-click and
 "Open With" work once the app has been launched once.
 
 ## Keys
 
 | Key | Action |
 |---|---|
-| `⌘O` / `⌘T` | open file / new tab |
-| `⌘P` | quick-switch (open tabs + recents) |
-| `⌘W` | close tab |
+| `⌘O` · `⌘T` · `⌘W` | open file · new tab · close tab |
 | `⌘S` | save (atomic) |
+| `⌘P` | quick-switch (open tabs + recents) |
 | `⌘E` | toggle live preview ⇄ raw source |
-| `⇧⌘B` | toggle file browser |
-| `⌘B` `⌘I` `⌘K` | bold · italic · link |
-| `⌘1–6`, `⌘0` | heading level · paragraph |
+| `⇧⌘B` · `⇧⌘O` | toggle file browser · outline |
+| `⌘=` · `⌘-` | text size up · down |
+| `⌘B` · `⌘I` · `⌘K` · `⇧⌘C` | bold · italic · link · inline code |
+| `⌘1`–`⌘6` · `⌘0` | heading level · paragraph |
+
+Lists, task lists, code fences and tables live in the Format menu without
+bindings. Every binding carries a modifier — bare letters are impossible in an
+editor.
 
 ## Development
 
-Tauri v2 + vanilla TypeScript + CodeMirror 6 + markdown-it. Built agent-first:
-most of the code is written by coding agents, so everything important is
-verifiable headlessly — editor logic and the byte-identity invariant in vitest,
-the watcher against real atomic writes in `cargo test`.
+Tauri v2 + vanilla TypeScript + CodeMirror 6 + markdown-it.
 
 ```sh
 npm run tauri dev   # run
 npm test            # frontend tests (vitest)
-cargo test          # watcher/save tests (in src-tauri/)
+cd src-tauri && cargo test   # watcher, save and git tests
 ```
 
-Architecture decisions and their evidence live in `CLAUDE.md` and
-`docs/research/` — including the measured spike data behind the editor-core
-choice.
+Built agent-first: most of the code is written by coding agents, so everything
+important is verifiable headlessly. Editor logic and the byte-identity
+invariant run in vitest; the watcher is tested against real atomic writes in
+`cargo test`. A change is not done until an agent can prove it works without a
+human looking at a screen.
+
+Architecture decisions and the evidence behind them live in
+[`CLAUDE.md`](CLAUDE.md), [`docs/decisions/`](docs/decisions/) and
+[`docs/research/`](docs/research/) — including the measured spike data behind
+the editor-core choice and why the whole block-editor family was disqualified.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

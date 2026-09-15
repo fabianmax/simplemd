@@ -342,7 +342,7 @@ external writes only — never polled, and a tab switch refreshes the branch alo
 lezer tree, never a `^#+` scan — a "#" inside a fence is code. Rebuilt on a
 300ms doc debounce; cursor tracking only moves a class.
 **v1.9**: packaging (`docs/decisions/2026-09-15-signing-and-distribution.md`).
-Repo is live at github.com/fabianmax/simplemd, private. The CLI now ships inside
+Repo is live at github.com/fabianmax/simplemd. The CLI now ships inside
 the bundle at `Contents/Helpers/simplemd` via `bundle.macOS.files` — it resolves
 `$0` through symlinks (Homebrew links it onto PATH) and `open -a`s its own
 bundle by path, so it works before Launch Services has ever seen the app.
@@ -360,14 +360,14 @@ cert is missing. Homebrew cask is scaffolded at `packaging/homebrew/` and
 deliberately not published: a cask fetches a release asset, and on a private
 repo that asset is private too. It needs a public repo *and* a notarized DMG.
 
-Version settled at **0.1.9** (user decision 2026-09-15) — aligned across
+Version settled at **0.1.9** (2026-09-15) — aligned across
 package.json, Cargo.toml, tauri.conf.json and both lockfiles. The v1.x numbers
 throughout this file are feature milestones, not releases; the release series is
 0.x and the v1.9 milestone ships as 0.1.9. The DMG name and release tag both
 derive from tauri.conf.json, so bump it there first and the rest follow.
 
-Open polish debt: diff visuals (user: "not 100% appealing" — colors,
-deletion carets, pill).
+Open polish debt: diff visuals — colors, deletion carets and the pill are
+functional but not yet visually resolved.
 
 App icon: done (v1.9). `assets/icon.svg` is the master — a Markdown heading
 with the caret parked after it, ink #1d1d1f on white with the accent as the

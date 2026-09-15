@@ -6,7 +6,7 @@ Developer ID is done and verified; signing and notarization are configured but
 have never been executed.
 
 Unblocks the item deferred on 2026-09-01 ("until a GitHub repo exists"). The
-repo now exists: `github.com/fabianmax/simplemd`, private.
+repo now exists: `github.com/fabianmax/simplemd`.
 
 ## What shipped
 
@@ -80,7 +80,7 @@ Tauri imports the certificate into a temporary keychain itself.
 
 ## The version number: 0.1.9
 
-Settled by user decision, 2026-09-15. The v1.1–v1.9 numbering used throughout
+Settled 2026-09-15. The v1.1–v1.9 numbering used throughout
 CLAUDE.md is a **feature-milestone** series, not a release series; releases are
 0.x, and the v1.9 milestone ships as 0.1.9.
 

@@ -2,10 +2,17 @@
 #
 # Triggered by pushing a tag (`git tag v1.9.0 && git push origin v1.9.0`).
 #
-# Unset secrets are not a soft failure: the guard below stops the run rather than
-# publishing an unsigned build that Gatekeeper rejects on every machine but this
-# one. See docs/decisions/2026-09-15-signing-and-distribution.md for what each
-# secret is and how to produce it.
+# Signing is not configured yet (no Apple Developer ID exists), so the job is
+# gated on the repository variable SIGNING_CONFIGURED. Until that is set to
+# "true" a tag skips this job cleanly instead of failing — a red X on every
+# release tag would train you to ignore it. Once signing is real:
+#
+#   gh variable set SIGNING_CONFIGURED --body true
+#
+# The secrets guard below then still stops a half-configured run, because an
+# unsigned build is one Gatekeeper rejects on every machine but the one that
+# built it. See docs/decisions/2026-09-15-signing-and-distribution.md for what
+# each secret is and how to produce it.
 name: release
 
 on:
@@ -21,6 +28,8 @@ jobs:
   release:
     # arm64 runner: simplemd is Apple Silicon native, and the bundle is not universal.
     runs-on: macos-14
+    if: vars.SIGNING_CONFIGURED == 'true'
+
 
     steps:
       - uses: actions/checkout@v4
