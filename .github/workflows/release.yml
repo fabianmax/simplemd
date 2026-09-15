@@ -1,0 +1,117 @@
+# Build, sign, notarize and staple a release DMG.
+#
+# Triggered by pushing a tag (`git tag v1.9.0 && git push origin v1.9.0`).
+#
+# Unset secrets are not a soft failure: the guard below stops the run rather than
+# publishing an unsigned build that Gatekeeper rejects on every machine but this
+# one. See docs/decisions/2026-09-15-signing-and-distribution.md for what each
+# secret is and how to produce it.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # arm64 runner: simplemd is Apple Silicon native, and the bundle is not universal.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Require signing secrets
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=""
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                   APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            eval "val=\$$v"
+            [ -n "$val" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secrets:$missing"
+            echo "A release without these is unsigned and Gatekeeper-blocked. Refusing to build."
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - name: Test
+        run: |
+          npm test
+          cd src-tauri && cargo test
+
+      # Tauri imports APPLE_CERTIFICATE into a temporary keychain itself, signs with
+      # APPLE_SIGNING_IDENTITY (hardened runtime is on by default), then notarizes
+      # with the APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID triple and staples.
+      # APPLE_PASSWORD is an app-specific password, never the Apple ID password.
+      #
+      # GitHub Actions sets CI=true, which makes the DMG bundler skip its
+      # AppleScript window styling — that step needs Finder automation permission
+      # and has no way to be granted on a runner.
+      - name: Build, sign, notarize
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run tauri build -- --target aarch64-apple-darwin
+
+      # Verify against the artifact rather than trusting the build log. `spctl`
+      # answers the only question that matters: what a machine that has never seen
+      # this developer will do when the app is opened.
+      - name: Verify signature, notarization and the bundled CLI
+        run: |
+          set -euo pipefail
+          base=src-tauri/target/aarch64-apple-darwin/release/bundle
+          app="$base/macos/simplemd.app"
+          dmg=$(ls "$base"/dmg/*.dmg)
+
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -d --entitlements - --verbose=4 "$app" 2>&1 | grep -q runtime \
+            || { echo "::error::hardened runtime flag missing"; exit 1; }
+          spctl --assess --type execute --verbose=4 "$app"
+          xcrun stapler validate "$app"
+
+          # The DMG is notarized and stapled separately from the app inside it, so
+          # a download that has never been opened is not quarantine-blocked.
+          xcrun stapler staple "$dmg" || true
+          xcrun stapler validate "$dmg"
+
+          test -x "$app/Contents/Helpers/simplemd" || { echo "::error::CLI missing"; exit 1; }
+
+          echo "sha256 (for the Homebrew cask):"
+          shasum -a 256 "$dmg"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          generate_release_notes: true

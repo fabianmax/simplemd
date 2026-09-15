@@ -341,12 +341,31 @@ external writes only — never polled, and a tab switch refreshes the branch alo
 **v1.8**: outline panel (⌘⇧O) right of the editor column. Headings come from the
 lezer tree, never a `^#+` scan — a "#" inside a fence is code. Rebuilt on a
 300ms doc debounce; cursor tracking only moves a class.
-Signing/notarization/Homebrew cask deferred by user decision 2026-09-01
-until a GitHub repo exists; app runs unsigned locally meanwhile.
+**v1.9**: packaging (`docs/decisions/2026-09-15-signing-and-distribution.md`).
+Repo is live at github.com/fabianmax/simplemd, private. The CLI now ships inside
+the bundle at `Contents/Helpers/simplemd` via `bundle.macOS.files` — it resolves
+`$0` through symlinks (Homebrew links it onto PATH) and `open -a`s its own
+bundle by path, so it works before Launch Services has ever seen the app.
+Verified: routes into the running instance rather than launching a second copy.
+DMG target on, and the Finder-automation debt is closed — Tauri passes
+`--skip-jenkins` to `bundle_dmg.sh` when `CI` is set, so `CI=true npm run tauri
+build` styles nothing and prompts for nothing. `minimumSystemVersion` 11.0
+(Tauri's 10.13 default predates Apple Silicon). Tag-triggered release workflow
+refuses to build without the six signing secrets rather than shipping something
+Gatekeeper blocks, and verifies with `spctl`/`stapler` over the artifact.
+
+**Signing and notarization remain unexecuted** — no Apple Developer Program
+membership, so no Developer ID certificate exists. The config is done; only the
+cert is missing. Homebrew cask is scaffolded at `packaging/homebrew/` and
+deliberately not published: a cask fetches a release asset, and on a private
+repo that asset is private too. It needs a public repo *and* a notarized DMG.
+
+Version mismatch left alone deliberately: `tauri.conf.json` says 0.1.0 while
+this file talks in v1.x milestones. The DMG name and release tag both derive
+from it, so that is a product call to make before the first tag.
 
 Open polish debt: diff visuals (user: "not 100% appealing" — colors,
-deletion carets, pill), DMG (needs Finder-automation permission
-or the non-styled path).
+deletion carets, pill).
 
 App icon: done (v1.9). `assets/icon.svg` is the master — a Markdown heading
 with the caret parked after it, ink #1d1d1f on white with the accent as the

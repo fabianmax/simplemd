@@ -1,0 +1,33 @@
+#!/bin/sh
+# simplemd — open Markdown files from the terminal.
+#
+# Routes through Launch Services (`open -a`) instead of passing paths as argv to
+# the binary. Command-line arguments grant no file access under sandboxing — the
+# sandbox never reads argv and never extends access to those paths — while a
+# Launch Services document-open issues a sandbox extension per file. Keeping this
+# shape means sandboxing stays a later option rather than a rewrite.
+# See docs/decisions/2026-09-15-signing-and-distribution.md.
+#
+# Lives inside the .app because notarization cannot staple a standalone binary.
+
+set -e
+
+# Resolve $0 through any symlinks (Homebrew links this into the prefix bin),
+# then walk up out of Contents/Helpers to the .app itself. Addressing the bundle
+# by path rather than by name works before the app has ever been registered and
+# is unambiguous when several copies exist.
+target="$0"
+while [ -L "$target" ]; do
+  link="$(readlink "$target")"
+  case "$link" in
+    /*) target="$link" ;;
+    *) target="$(dirname "$target")/$link" ;;
+  esac
+done
+app="$(cd "$(dirname "$target")/../.." && pwd)"
+
+if [ "$#" -eq 0 ]; then
+  exec open -a "$app"
+fi
+
+exec open -a "$app" "$@"

@@ -42,20 +42,38 @@ the full non-goals list; it is load-bearing.
 
 ## Install
 
-Unsigned local builds for now (signing/notarization/Homebrew cask planned).
+Local builds, unsigned. Signing and notarization are wired up but not yet
+executed — that needs an Apple Developer ID, which this project does not have.
+Until then macOS treats the app as unidentified; right-click → Open the first
+time, or clear the quarantine flag with
+`xattr -d com.apple.quarantine /Applications/simplemd.app`.
 
 ```sh
-git clone <this repo> && cd simplemd
+git clone https://github.com/fabianmax/simplemd && cd simplemd
 npm install
-npm run tauri build
+CI=true npm run tauri build
 # → src-tauri/target/release/bundle/macos/simplemd.app
+# → src-tauri/target/release/bundle/dmg/simplemd_<version>_aarch64.dmg
 ```
 
-Open files from the terminal:
+`CI=true` skips the DMG bundler's AppleScript window-styling step, which
+otherwise needs Finder automation permission. Drop it if you have granted that
+and want the styled window.
+
+### From the terminal
+
+The CLI ships inside the bundle (notarization cannot staple a standalone
+binary). Symlink it onto your `PATH`:
 
 ```sh
-open -a simplemd path/to/plan.md
+ln -s /Applications/simplemd.app/Contents/Helpers/simplemd /usr/local/bin/simplemd
+simplemd path/to/plan.md
 ```
+
+It opens in the already-running instance, in a new tab. `open -a simplemd
+path/to/plan.md` does the same thing without the symlink — the CLI routes
+through Launch Services either way, because command-line arguments grant no
+file access under sandboxing and a document-open does.
 
 `.md`/`.markdown` are registered file associations — Finder double-click and
 "Open With" work once the app has been launched once.

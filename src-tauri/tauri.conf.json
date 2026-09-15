@@ -26,7 +26,8 @@
   "bundle": {
     "active": true,
     "targets": [
-      "app"
+      "app",
+      "dmg"
     ],
     "icon": [
       "icons/32x32.png",
@@ -35,6 +36,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "files": {
+        "Helpers/simplemd": "bin/simplemd"
+      }
+    },
     "fileAssociations": [
       {
         "ext": [
