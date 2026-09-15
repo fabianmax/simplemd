@@ -41,7 +41,12 @@ html, body, #app {
 .cm-editor.cm-focused { outline: none; }
 .cm-editor .cm-content {
   padding: 24px 0 40vh;
-  max-width: 76ch;
+  /* 76ch was NARROWER than the 80-column convention agent files are written to
+     (CM6's base theme puts .cm-scroller in monospace, so 1ch is exactly one
+     column). Every hard-wrapped source line wrapped once more, leaving orphan
+     tails — issue #1. The measure now fills the window and only caps on very
+     wide displays, well clear of 80. */
+  max-width: min(100%, 132ch);
   margin: 0 auto;
   caret-color: var(--fg);
   /* Two independent factors:
