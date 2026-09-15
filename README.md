@@ -8,6 +8,17 @@
 
 macOS 11+ · Apple Silicon · MIT
 
+<video
+  src="https://github.com/fabianmax/simplemd/raw/main/assets/simplemd-promo.mp4"
+  poster="https://github.com/fabianmax/simplemd/raw/main/assets/promo-poster.png"
+  controls muted playsinline width="760"></video>
+
+<sub>
+
+**[▶ Watch the 52-second tour](https://github.com/fabianmax/simplemd/raw/main/assets/simplemd-promo.mp4)** — if the player above does not load.
+
+</sub>
+
 </div>
 
 ## Why
