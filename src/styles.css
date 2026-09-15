@@ -365,6 +365,20 @@ body.resizing { cursor: col-resize; user-select: none; }
 .browser-row:hover { background: var(--band); }
 .browser-row:hover > .browser-chevron { opacity: 0.85; }
 .browser-active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+/* Read-only review context: a dot, not a letter — the panel stays a browser. */
+.browser-git {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  margin-left: auto;
+  margin-right: 2px;
+}
+.browser-row[data-git="M"] .browser-git { background: #e5a50a; }
+.browser-row[data-git="A"] .browser-git { background: var(--accent); }
+.browser-row[data-git="?"] .browser-git { background: #2da44e; }
+.browser-row[data-git] .browser-name { color: var(--fg); }
+
 .browser-hint { padding: 12px; color: var(--fg-dim); }
 .browser-hint p { margin: 0 0 8px; }
 .browser-pick {

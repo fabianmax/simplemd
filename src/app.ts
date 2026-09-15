@@ -52,6 +52,7 @@ export class App {
   private mainRow: HTMLElement;
   private zoomTimer: ReturnType<typeof setTimeout> | null = null;
   private zoom = DEFAULT_ZOOM;
+  private branch: string | null = null;
   private diffCount: HTMLElement;
   private diffNav = 0;
 
@@ -235,10 +236,33 @@ export class App {
     });
   }
 
+  /** Read-only git context: the branch in the status bar, markers in the browser.
+   *  Refreshed on the events that can change it — never polled. */
+  private async refreshGit(withBrowser = false) {
+    const dir = this.activeTab?.path?.replace(/\/[^/]+$/, "") ?? null;
+    let branch: string | null = null;
+    if (dir) {
+      try {
+        branch = (await ipc.gitInfo(dir)).branch;
+      } catch {
+        branch = null;
+      }
+    }
+    if (branch !== this.branch) {
+      this.branch = branch;
+      this.renderStats();
+    }
+    // Only on the events that can actually change a file's state: one subprocess
+    // per rendered level is fine after a save, wasteful on every tab switch.
+    if (withBrowser) await this.browser.refreshGit();
+  }
+
   private renderStats() {
     const tab = this.activeTab;
     this.statusBar.hidden = !tab;
-    if (tab) this.statusBar.textContent = formatStats(docStats(this.view.state.doc.toString()));
+    if (!tab) return;
+    const stats = formatStats(docStats(this.view.state.doc.toString()));
+    this.statusBar.textContent = this.branch ? `\u2387 ${this.branch} \u00b7 ${stats}` : stats;
   }
 
   zoomBy(dir: 1 | -1) {
@@ -402,6 +426,7 @@ export class App {
     if (index < 0 || index >= this.tabs.length) return;
     this.stashActive();
     this.active = index;
+    void this.refreshGit(); // branch only: the tab moved, no file changed
     const tab = this.tabs[index];
     this.view.setState(tab.state);
     if (tab.diff && changeCount(tab.diff) > 0) {
@@ -477,6 +502,7 @@ export class App {
     tab.diff = null;
     this.view.dispatch({ effects: clearDiff.of(null) });
     this.renderChrome();
+    void this.refreshGit(true); // the file's git state just changed
   }
 
   // --- the agent loop ---------------------------------------------------------------
@@ -486,6 +512,7 @@ export class App {
     const tab = this.tabs[index];
     if (!tab) return;
     const isActive = index === this.active;
+    void this.refreshGit(true); // an external write changes git state too
     const dirty = isActive
       ? tab.dirty
       : tab.dirty; // stored per-tab; view state only diverges in doc/selection

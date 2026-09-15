@@ -24,6 +24,7 @@ const ipcStub = vi.hoisted(() => ({
   pickSavePath: vi.fn(async () => null),
   pickFolder: vi.fn(async () => null),
   confirmDiscard: vi.fn(async () => true),
+  gitInfo: vi.fn(async () => ({ branch: null as string | null, entries: [] })),
 }));
 vi.mock("../src/ipc", () => ipcStub);
 vi.mock("@tauri-apps/api/webview", () => ({
@@ -98,6 +99,27 @@ describe("window chrome", () => {
 
     app.togglePreview(); // ⌘E / the menu
     expect(btn.classList.contains("chrome-btn-on")).toBe(false);
+  });
+
+  it("shows the branch in the status bar, and only the stats without one", async () => {
+    const bar = () => root.querySelector<HTMLElement>(".status-bar")!;
+    ipcStub.gitInfo.mockResolvedValue({ branch: "v1.5-visual", entries: [] });
+    await app.openPath("/repo/plan.md");
+    await vi.waitFor(() => expect(bar().textContent).toContain("v1.5-visual"));
+    expect(bar().textContent).toContain("words");
+    expect(bar().hidden).toBe(false);
+
+    ipcStub.gitInfo.mockResolvedValue({ branch: null, entries: [] });
+    await app.openPath("/elsewhere/notes.md");
+    await vi.waitFor(() => expect(bar().textContent).not.toContain("v1.5-visual"));
+    expect(bar().textContent).toContain("words");
+  });
+
+  it("asks git about the directory of the active file only", async () => {
+    ipcStub.gitInfo.mockClear();
+    await app.openPath("/repo/deep/plan.md");
+    await vi.waitFor(() => expect(ipcStub.gitInfo).toHaveBeenCalled());
+    expect(ipcStub.gitInfo).toHaveBeenCalledWith("/repo/deep");
   });
 
   it("survives a tab re-render without losing either button", async () => {

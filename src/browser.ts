@@ -41,6 +41,9 @@ export class BrowserPanel {
   private header: HTMLElement;
   private tree: HTMLElement;
   private resizer: HTMLElement;
+  /** dir -> its rendered level, so a refresh only touches what is on screen.
+   *  This is the browser's whole memory: no cache of anything unrendered. */
+  private levels = new Map<string, HTMLElement>();
   private widthPx = DEFAULT_WIDTH;
   private rootPath: string | null = null;
   private activeFile: string | null = null;
@@ -122,6 +125,7 @@ export class BrowserPanel {
 
   async setRoot(path: string) {
     this.rootPath = path;
+    this.levels.clear(); // the whole tree is about to be replaced
     this.header.replaceChildren();
     const up = document.createElement("button");
     up.textContent = "↑";
@@ -162,6 +166,16 @@ export class BrowserPanel {
     return d;
   }
 
+  /** Re-reads git state for the levels currently on screen (after a save, or an
+   *  external write). Never walks anything that is not already rendered. */
+  async refreshGit() {
+    if (!this.isOpen) return;
+    for (const [dir, level] of this.levels) {
+      if (level.hidden) continue; // collapsed: not on screen, not worth a subprocess
+      applyGit(level, await gitStates(dir));
+    }
+  }
+
   private row(e: ipc.DirEntry): HTMLElement {
     const kind = entryKind(e.name, e.is_dir);
     const row = document.createElement("div");
@@ -192,14 +206,17 @@ export class BrowserPanel {
     const box = document.createElement("div");
     box.className = "browser-level";
     box.dataset.depth = String(depth);
+    this.levels.set(dirPath, box);
     let entries;
     try {
       entries = await ipc.listDir(dirPath);
     } catch {
       return box;
     }
+    const git = await gitStates(dirPath);
     for (const e of entries) {
       const row = this.row(e);
+      setGitState(row, git.get(e.path));
       box.appendChild(row);
       if (e.is_dir) {
         let child: HTMLElement | null = null;
@@ -219,5 +236,43 @@ export class BrowserPanel {
       }
     }
     return box;
+  }
+}
+
+// --- git markers ----------------------------------------------------------------
+
+const GIT_TITLE: Record<string, string> = {
+  M: "changed",
+  A: "staged",
+  "?": "untracked",
+};
+
+/** Never throws: a directory outside a repo is a non-event, not an error. */
+async function gitStates(dir: string): Promise<Map<string, string>> {
+  try {
+    const info = await ipc.gitInfo(dir);
+    return new Map(info.entries.map((e) => [e.path, e.state]));
+  } catch {
+    return new Map();
+  }
+}
+
+function setGitState(row: HTMLElement, state: string | undefined) {
+  row.querySelector(".browser-git")?.remove();
+  delete row.dataset.git;
+  if (!state) return;
+  row.dataset.git = state;
+  const dot = document.createElement("span");
+  dot.className = "browser-git";
+  dot.title = GIT_TITLE[state] ?? state;
+  row.appendChild(dot);
+}
+
+function applyGit(level: HTMLElement, states: Map<string, string>) {
+  // Direct children only: a nested level refreshes against its own directory.
+  for (const row of level.children) {
+    if (!(row instanceof HTMLElement) || !row.classList.contains("browser-row")) continue;
+    const path = row.dataset.path;
+    if (path) setGitState(row, states.get(path));
   }
 }

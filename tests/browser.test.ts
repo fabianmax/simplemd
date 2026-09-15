@@ -3,9 +3,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const listDir = vi.fn();
 const pickFolder = vi.fn();
+const gitInfo = vi.fn();
 vi.mock("../src/ipc", () => ({
   listDir: (p: string) => listDir(p),
   pickFolder: () => pickFolder(),
+  gitInfo: (d: string) => gitInfo(d),
 }));
 
 import {
@@ -53,6 +55,8 @@ describe("BrowserPanel", () => {
     panel = new BrowserPanel(parent, (p) => opened.push(p));
     listDir.mockReset();
     pickFolder.mockReset();
+    gitInfo.mockReset();
+    gitInfo.mockResolvedValue({ branch: null, entries: [] });
     // Node shadows the jsdom global ("localStorage is not available because
     // --localstorage-file was not provided"), so stand one up explicitly.
     const store = new Map<string, string>();
@@ -125,6 +129,104 @@ describe("BrowserPanel", () => {
     // indent are CSS on the wrapper, never an inline padding on the row
     expect(levels[0].contains(levels[1])).toBe(true);
     expect(parent.querySelector<HTMLElement>(".browser-row")!.style.paddingLeft).toBe("");
+  });
+
+  it("marks git state per row, and leaves clean files unmarked", async () => {
+    listDir.mockResolvedValueOnce([
+      entry("changed.md", false),
+      entry("new.md", false),
+      entry("clean.md", false),
+    ]);
+    gitInfo.mockResolvedValueOnce({
+      branch: "main",
+      entries: [
+        { path: "/root/changed.md", state: "M" },
+        { path: "/root/new.md", state: "?" },
+      ],
+    });
+    await panel.toggle("/root", null);
+    const byName = (n: string) =>
+      [...parent.querySelectorAll<HTMLElement>(".browser-row")].find(
+        (r) => r.querySelector(".browser-name")?.textContent === n,
+      )!;
+    expect(byName("changed.md").dataset.git).toBe("M");
+    expect(byName("new.md").dataset.git).toBe("?");
+    expect(byName("clean.md").dataset.git).toBeUndefined();
+    expect(byName("changed.md").querySelector(".browser-git")).not.toBeNull();
+    expect(byName("clean.md").querySelector(".browser-git")).toBeNull();
+    expect(byName("new.md").querySelector<HTMLElement>(".browser-git")!.title).toBe(
+      "untracked",
+    );
+  });
+
+  it("a directory outside a repo is a non-event, not an error", async () => {
+    listDir.mockResolvedValueOnce([entry("a.md", false)]);
+    gitInfo.mockRejectedValueOnce(new Error("not a repo"));
+    await panel.toggle("/root", null);
+    expect(names(parent)).toEqual(["a.md"]);
+    expect(parent.querySelector(".browser-git")).toBeNull();
+  });
+
+  it("refreshGit re-reads only the levels already on screen", async () => {
+    listDir.mockResolvedValueOnce([entry("a.md", false)]);
+    await panel.toggle("/root", null);
+    const row = parent.querySelector<HTMLElement>(".browser-row")!;
+    expect(row.dataset.git).toBeUndefined();
+
+    gitInfo.mockReset();
+    gitInfo.mockResolvedValue({
+      branch: "main",
+      entries: [{ path: "/root/a.md", state: "M" }],
+    });
+    await panel.refreshGit();
+    expect(row.dataset.git).toBe("M"); // same element, updated in place
+    expect(gitInfo).toHaveBeenCalledTimes(1); // one rendered level, one call
+    expect(listDir).toHaveBeenCalledTimes(1); // and NO re-listing
+
+    // a marker that goes away must be removed, not left behind
+    gitInfo.mockResolvedValue({ branch: "main", entries: [] });
+    await panel.refreshGit();
+    expect(row.dataset.git).toBeUndefined();
+    expect(row.querySelector(".browser-git")).toBeNull();
+  });
+
+  it("skips collapsed levels on refresh", async () => {
+    listDir.mockResolvedValueOnce([entry("sub", true)]);
+    await panel.toggle("/root", null);
+    listDir.mockResolvedValueOnce([entry("nested.md", false, "/root/sub")]);
+    const dirRow = parent.querySelector<HTMLElement>(".browser-dir")!;
+    dirRow.click();
+    await vi.waitFor(() => expect(parent.textContent).toContain("nested.md"));
+
+    gitInfo.mockReset();
+    gitInfo.mockResolvedValue({ branch: "main", entries: [] });
+    await panel.refreshGit();
+    expect(gitInfo).toHaveBeenCalledTimes(2); // root + the expanded level
+
+    dirRow.click(); // collapse
+    gitInfo.mockClear();
+    await panel.refreshGit();
+    expect(gitInfo).toHaveBeenCalledTimes(1); // root only
+  });
+
+  it("forgets levels of the previous tree when the root changes", async () => {
+    listDir.mockResolvedValueOnce([entry("a.md", false)]);
+    await panel.toggle("/root", null);
+    listDir.mockResolvedValueOnce([entry("b.md", false, "/other")]);
+    await panel.setRoot("/other");
+    gitInfo.mockClear();
+    await panel.refreshGit();
+    expect(gitInfo).toHaveBeenCalledTimes(1);
+    expect(gitInfo).toHaveBeenCalledWith("/other");
+  });
+
+  it("does not touch git for a closed panel", async () => {
+    listDir.mockResolvedValueOnce([entry("a.md", false)]);
+    await panel.toggle("/root", null);
+    await panel.toggle("/root", null); // closed
+    gitInfo.mockReset();
+    await panel.refreshGit();
+    expect(gitInfo).not.toHaveBeenCalled();
   });
 
   it("marks the active file", async () => {
