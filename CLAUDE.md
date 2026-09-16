@@ -366,6 +366,32 @@ throughout this file are feature milestones, not releases; the release series is
 0.x and the v1.9 milestone ships as 0.1.9. The DMG name and release tag both
 derive from tauri.conf.json, so bump it there first and the rest follow.
 
+**Usage round (2026-09-16)** — five roadmap items, one branch, issues #2-#6:
+
+- **Rendered tables are editable** (#2). `WidgetType.ignoreEvent` defaults to
+  *true*, so a block widget swallows its own events: clicking a table did
+  nothing at all, the cursor never entered it, and the reveal predicate never
+  fired. Clicks are now mapped back to the source by hand and cell-precise —
+  `live-preview/table.ts` does it with line arithmetic, since a GFM cell cannot
+  contain a newline and body rows are offset by one for the delimiter row.
+- **The live preview no longer sticks** (#3). Two ways a stale decoration set
+  survived: the drag freeze never thawed (the transaction clearing the flag
+  carries neither doc change nor selection, so `update` fell through to
+  `map`), and an `ensureSyntaxTree` miss answered `Decoration.none` for the
+  whole document with nothing scheduled to retry. Both now rebuild — the second
+  off a partial tree plus a `parseWatcher` effect when the parse completes.
+  **Trap:** a reconfiguring transaction runs `update()` on the field it has
+  just created, against a `startState` that never had it, so reading another
+  field there needs `state.field(f, false)`; the required form throws.
+- **⌘E holds the viewport** (#4). Keeping the pixel offset moved the text,
+  because the modes have different line heights. `viewport.ts` anchors on the
+  top line plus the offset inside its block, restored in the measure cycle.
+- **Rendered tables take the measure** (#5), with a floor and a ceiling per
+  column so neither a short column collapses nor a prose column takes the lot.
+- **Find (⌘F)** (#6) via `@codemirror/search`, searching the buffer, so it
+  matches markdown syntax too. Accelerators are native menu items — AppKit eats
+  matched equivalents before the webview sees them. No project-wide search.
+
 Open polish debt: diff visuals — colors, deletion carets and the pill are
 functional but not yet visually resolved.
 
