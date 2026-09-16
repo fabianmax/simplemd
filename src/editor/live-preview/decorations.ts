@@ -55,7 +55,10 @@ export function buildDecorations(state: EditorState): DecorationSet {
           if (!anyLineRevealed(node.from, node.to)) {
             deco.push(
               Decoration.replace({
-                widget: new TableWidget(state.doc.sliceString(node.from, node.to)),
+                widget: new TableWidget(
+                  state.doc.sliceString(node.from, node.to),
+                  node.from,
+                ),
                 block: true,
               }).range(node.from, node.to),
             );
