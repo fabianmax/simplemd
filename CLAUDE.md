@@ -391,6 +391,15 @@ derive from tauri.conf.json, so bump it there first and the rest follow.
 - **Find (⌘F)** (#6) via `@codemirror/search`, searching the buffer, so it
   matches markdown syntax too. Accelerators are native menu items — AppKit eats
   matched equivalents before the webview sees them. No project-wide search.
+  CM's stock bar (replace field, three checkboxes, five buttons) read as
+  furniture, so `find-ui.ts` supplies its own panel through
+  `search({ createPanel })`: a translucent pill at the top right — query, count,
+  ▲ ▼ ✕ — floated by taking `.cm-panels-top` out of the editor's flex column.
+  It has to stay a CM *panel*: `searchHighlighter` paints nothing while the
+  panel is null, so a free-floating div would highlight no matches. No
+  case/regexp/word toggles — the query is smart-cased (a capital letter means
+  case-sensitive), and no replace: bulk-rewriting an agent's plan is not the
+  job of this window.
 
 Open polish debt: diff visuals — colors, deletion carets and the pill are
 functional but not yet visually resolved.

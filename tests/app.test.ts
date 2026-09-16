@@ -67,7 +67,7 @@ describe("window chrome", () => {
 
     await app.handleMenu("find");
     expect(searchPanelOpen(app.view.state)).toBe(true);
-    const input = root.querySelector<HTMLInputElement>('.cm-search [name="search"]')!;
+    const input = root.querySelector<HTMLInputElement>(".find-pop .find-input")!;
     expect(input).not.toBeNull();
 
     app.view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: "alpha" })) });

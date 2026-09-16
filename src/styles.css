@@ -114,60 +114,64 @@ html, body, #app {
 }
 .lp-table th { background: var(--band); white-space: nowrap; }
 
-/* --- find panel (@codemirror/search) -------------------------------------- */
-/* The panel is CM's, the look is the app's: same band, same 13px chrome as the
-   tab strip and status bar, so it reads as part of the window. */
-.cm-editor .cm-panels {
-  background: var(--bg);
-  color: var(--fg);
-  border-bottom: 1px solid var(--band);
-}
-.cm-editor .cm-panel.cm-search {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  font: 13px -apple-system, BlinkMacSystemFont, sans-serif;
-}
-.cm-editor .cm-panel.cm-search br { display: none; } /* one row, wrapping */
-.cm-editor .cm-panel.cm-search label {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--fg-dim);
-}
-.cm-editor .cm-textfield {
-  font: inherit;
-  padding: 3px 7px;
-  border-radius: 5px;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  background: var(--bg);
-  color: var(--fg);
-}
-.cm-editor .cm-textfield:focus { outline: 1px solid var(--accent); }
-.cm-editor .cm-panel.cm-search .cm-button {
-  font: inherit;
-  padding: 2px 9px;
-  border-radius: 5px;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  background: var(--bg);
-  background-image: none; /* CM's base theme paints a gradient */
-  color: var(--fg);
-  cursor: pointer;
-}
-.cm-editor .cm-panel.cm-search .cm-button:hover { background: var(--band); }
-/* Replace stays reachable but recessive: this is a review surface first. */
-.cm-editor .cm-panel.cm-search [name="replace"],
-.cm-editor .cm-panel.cm-search [name="replaceAll"] { color: var(--fg-dim); }
-.cm-editor .cm-panel.cm-search [name="close"] {
-  margin-left: auto;
+/* --- find popup (@codemirror/search, own panel) --------------------------- */
+/* The panel container is pulled OUT of the editor's flex column so the popup
+   floats over the text instead of pushing the document down — the bar CM ships
+   was more furniture than a review surface needs. */
+.cm-editor .cm-panels.cm-panels-top {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  left: auto;
   border: none;
   background: transparent;
-  color: var(--fg-dim);
-  font-size: 15px;
-  cursor: pointer;
+  z-index: 40;
+  pointer-events: none; /* only the pill itself is a target */
 }
+.find-pop {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 9px;
+  border-radius: 8px;
+  font: 12px -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--fg);
+  /* Translucent, so the line it covers stays readable underneath. */
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.find-input {
+  font: inherit;
+  width: 15ch;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+.find-input::placeholder { color: var(--fg-dim); }
+.find-count {
+  min-width: 4ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+/* No match: the count goes red rather than the popup growing an error line. */
+.find-empty .find-count { color: #e5534b; }
+.find-btn {
+  border: none;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.find-btn:hover { background: var(--band); }
 .cm-editor .cm-searchMatch {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   border-radius: 2px;

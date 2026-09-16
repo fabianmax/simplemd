@@ -4,6 +4,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { history, historyKeymap, defaultKeymap } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
+import { findPanel } from "../find-ui";
 import { keymap } from "@codemirror/view";
 import { livePreview } from "./live-preview/decorations";
 import { diffField } from "./diff-decorations";
@@ -40,7 +41,7 @@ export function createEditorState(
       // Find runs over the BUFFER, which is the document — so it matches
       // markdown syntax too, and a hit inside a rendered table reveals that
       // line like any other cursor move.
-      search({ top: true }),
+      search({ top: true, createPanel: findPanel }),
       // ⌘F/⌘G are also native menu items, and AppKit eats a matched equivalent
       // before the webview sees it — these bindings are what serves the panel
       // itself (Escape to close, Enter to step).
