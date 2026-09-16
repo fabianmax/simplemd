@@ -26,6 +26,8 @@ import {
 } from "./tabdrag";
 import { ICON, svgIcon } from "./icons";
 import { DEFAULT_ZOOM, loadZoom, saveZoom, stepZoom, zoomKeyDirection, zoomLabel } from "./zoom";
+import { captureAnchor, restoredScrollTop, type Heights } from "./viewport";
+import { openSearchPanel, findNext, findPrevious } from "@codemirror/search";
 
 export interface Tab {
   /** null = untitled scratch tab, gets a path on first save */
@@ -474,13 +476,35 @@ export class App {
     this.previewToggle.setAttribute("aria-pressed", String(raw));
   }
 
+  /** The EditorView slice captureAnchor/restoredScrollTop need. */
+  private heights(): Heights {
+    const view = this.view;
+    return {
+      scrollTop: view.scrollDOM.scrollTop,
+      lineAtHeight: (h) => view.state.doc.lineAt(view.lineBlockAtHeight(h).from).number,
+      topOfLine: (n) => view.lineBlockAt(view.state.doc.line(n).from).top,
+      lines: view.state.doc.lines,
+    };
+  }
+
   togglePreview() {
+    // Line heights differ between the two modes, so the pixel offset alone
+    // would move the text under the reader (#4).
+    const anchor = captureAnchor(this.heights());
     this.previewOn = !this.previewOn;
     this.syncPreviewToggle();
     this.view.dispatch({
       effects: previewCompartment.reconfigure(
         this.previewOn ? previewExtension() : [],
       ),
+    });
+    // After the measure cycle: the new heights (widgets built or dropped) are
+    // only known once CM has laid the document out again.
+    this.view.requestMeasure({
+      read: () => restoredScrollTop(this.heights(), anchor),
+      write: (top) => {
+        this.view.scrollDOM.scrollTop = top;
+      },
     });
     this.view.focus();
   }
@@ -525,6 +549,12 @@ export class App {
       await this.save();
     } else if (id === "close-tab") {
       await this.closeTab(this.active);
+    } else if (id === "find") {
+      openSearchPanel(this.view);
+    } else if (id === "find-next") {
+      findNext(this.view);
+    } else if (id === "find-prev") {
+      findPrevious(this.view);
     } else if (id === "toggle-preview") {
       this.togglePreview();
     } else if (id === "quick-switch") {

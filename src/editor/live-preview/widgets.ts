@@ -1,7 +1,9 @@
 import { WidgetType, type EditorView } from "@codemirror/view";
+import { EditorSelection } from "@codemirror/state";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
 import { toggleTaskSpec } from "./checkbox";
+import { cellPos } from "./table";
 
 const md = new MarkdownIt({ html: false });
 
@@ -16,22 +18,46 @@ const SANITIZE = {
 };
 
 export class TableWidget extends WidgetType {
-  constructor(readonly src: string) {
+  constructor(readonly src: string, readonly from: number) {
     super();
   }
   eq(other: TableWidget) {
-    return other.src === this.src;
+    return other.src === this.src && other.from === this.from;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const div = document.createElement("div");
     div.className = "lp-table";
     div.innerHTML = DOMPurify.sanitize(md.render(this.src), SANITIZE);
     // Rendered links must not navigate the app webview.
     div.addEventListener("click", (e) => e.preventDefault());
+    // A block widget swallows its own events, so a click has to be mapped back
+    // to the source by hand — otherwise the cursor never enters the table and
+    // it cannot be edited at all (#2). Cell-precise: click a cell, land in that
+    // cell's text with the row revealed as source.
+    div.addEventListener("mousedown", (e) => {
+      const cell = (e.target as HTMLElement | null)?.closest?.("td, th");
+      const pos = cell ? cellPos(this.src, this.from, ...coords(cell)) : this.from;
+      e.preventDefault();
+      view.dispatch({ selection: EditorSelection.cursor(pos), scrollIntoView: true });
+      view.focus();
+    });
     return div;
   }
-  // Default ignoreEvent (true) lets CM place the cursor at the widget's
-  // position on click -> the table reveals as raw source.
+  ignoreEvent(e: Event) {
+    return e.type === "mousedown"; // handled above; CM must not also act.
+  }
+}
+
+/** [row, col] of a rendered cell, header = row 0. */
+function coords(cell: Element): [number, number] {
+  const row = cell.parentElement as HTMLTableRowElement | null;
+  const col = row ? Array.prototype.indexOf.call(row.children, cell) : 0;
+  if (!row) return [0, 0];
+  const inHead = row.parentElement?.tagName === "THEAD" || cell.tagName === "TH";
+  if (inHead) return [0, col];
+  const body = row.parentElement;
+  const index = body ? Array.prototype.indexOf.call(body.children, row) : 0;
+  return [index + 1, col];
 }
 
 export class CheckboxWidget extends WidgetType {

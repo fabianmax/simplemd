@@ -94,13 +94,91 @@ html, body, #app {
 /* overflow-x rather than a squeezed layout: macOS overlay scrollbars take no
    layout height, so the widget's measured height is unchanged. */
 .lp-table { padding: 2px 0; overflow-x: auto; }
-.lp-table table { border-collapse: collapse; }
+/* width:100% so the columns have the whole measure to divide — shrink-to-fit
+   left a table wrapping inside half the line while the other half sat empty.
+   table-layout stays auto: content decides the split, the measure only sets
+   how much there is to split. */
+.lp-table table { border-collapse: collapse; width: 100%; table-layout: auto; }
 .lp-table th, .lp-table td {
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
   padding: 6px 12px;
   text-align: left;
+  vertical-align: top;
+  /* Floor and ceiling on one column's share: without the floor a "Status"
+     column collapses to one character per line next to a prose column; without
+     the ceiling a single long sentence takes everything. Both are hints to the
+     auto layout, not fixed widths. */
+  min-width: 7ch;
+  max-width: 48ch;
+  overflow-wrap: anywhere; /* a long path or URL must not force a scrollbar */
 }
-.lp-table th { background: var(--band); }
+.lp-table th { background: var(--band); white-space: nowrap; }
+
+/* --- find popup (@codemirror/search, own panel) --------------------------- */
+/* The panel container is pulled OUT of the editor's flex column so the popup
+   floats over the text instead of pushing the document down — the bar CM ships
+   was more furniture than a review surface needs. */
+.cm-editor .cm-panels.cm-panels-top {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  left: auto;
+  border: none;
+  background: transparent;
+  z-index: 40;
+  pointer-events: none; /* only the pill itself is a target */
+}
+.find-pop {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 9px;
+  border-radius: 8px;
+  font: 12px -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--fg);
+  /* Translucent, so the line it covers stays readable underneath. */
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.find-input {
+  font: inherit;
+  width: 15ch;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+.find-input::placeholder { color: var(--fg-dim); }
+.find-count {
+  min-width: 4ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+/* No match: the count goes red rather than the popup growing an error line. */
+.find-empty .find-count { color: #e5534b; }
+.find-btn {
+  border: none;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.find-btn:hover { background: var(--band); }
+.cm-editor .cm-searchMatch {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 2px;
+}
+.cm-editor .cm-searchMatch-selected {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
 
 /* --- conflict bar (non-modal) -------------------------------------------- */
 .conflict-bar {
