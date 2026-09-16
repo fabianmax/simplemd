@@ -52,6 +52,18 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
         .cut()
         .copy()
         .paste()
+        .separator()
+        // Find lives here rather than in a CM6 keymap alone: AppKit consumes a
+        // matched key equivalent before the webview sees it, and a menu item is
+        // how a hotkey stays discoverable.
+        .item(&MenuItemBuilder::new("Find…").id("find").accelerator("CmdOrCtrl+F").build(app)?)
+        .item(&MenuItemBuilder::new("Find Next").id("find-next").accelerator("CmdOrCtrl+G").build(app)?)
+        .item(
+            &MenuItemBuilder::new("Find Previous")
+                .id("find-prev")
+                .accelerator("CmdOrCtrl+Shift+G")
+                .build(app)?,
+        )
         .build()?;
 
     let mut fmt = SubmenuBuilder::new(app, "Format");

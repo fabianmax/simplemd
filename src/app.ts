@@ -27,6 +27,7 @@ import {
 import { ICON, svgIcon } from "./icons";
 import { DEFAULT_ZOOM, loadZoom, saveZoom, stepZoom, zoomKeyDirection, zoomLabel } from "./zoom";
 import { captureAnchor, restoredScrollTop, type Heights } from "./viewport";
+import { openSearchPanel, findNext, findPrevious } from "@codemirror/search";
 
 export interface Tab {
   /** null = untitled scratch tab, gets a path on first save */
@@ -548,6 +549,12 @@ export class App {
       await this.save();
     } else if (id === "close-tab") {
       await this.closeTab(this.active);
+    } else if (id === "find") {
+      openSearchPanel(this.view);
+    } else if (id === "find-next") {
+      findNext(this.view);
+    } else if (id === "find-prev") {
+      findPrevious(this.view);
     } else if (id === "toggle-preview") {
       this.togglePreview();
     } else if (id === "quick-switch") {

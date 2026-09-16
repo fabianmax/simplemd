@@ -33,6 +33,7 @@ vi.mock("@tauri-apps/api/webview", () => ({
   getCurrentWebview: () => ({ onDragDropEvent: async () => () => {} }),
 }));
 
+import { searchPanelOpen, setSearchQuery, SearchQuery } from "@codemirror/search";
 import { App } from "../src/app";
 
 /** The chrome is the part of App with no pure core to test separately, so it is
@@ -55,6 +56,39 @@ describe("window chrome", () => {
 
   const browserToggle = () => root.querySelector<HTMLButtonElement>(".browser-toggle")!;
   const previewToggle = () => root.querySelector<HTMLButtonElement>(".preview-toggle")!;
+
+  it("opens the find panel from the menu and steps matches (#6)", async () => {
+    ipcStub.readFile.mockResolvedValueOnce({
+      content: "alpha beta\nalpha gamma\n",
+      hash: "h1",
+    });
+    await app.openPath("/docs/plan.md");
+    expect(searchPanelOpen(app.view.state)).toBe(false);
+
+    await app.handleMenu("find");
+    expect(searchPanelOpen(app.view.state)).toBe(true);
+    const input = root.querySelector<HTMLInputElement>('.cm-search [name="search"]')!;
+    expect(input).not.toBeNull();
+
+    app.view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: "alpha" })) });
+    await app.handleMenu("find-next");
+    const first = app.view.state.selection.main;
+    expect(app.view.state.doc.sliceString(first.from, first.to)).toBe("alpha");
+    await app.handleMenu("find-next");
+    expect(app.view.state.selection.main.from).toBeGreaterThan(first.from);
+    await app.handleMenu("find-prev");
+    expect(app.view.state.selection.main.from).toBe(first.from);
+  });
+
+  it("searches the source, markdown syntax included (#6)", async () => {
+    ipcStub.readFile.mockResolvedValueOnce({ content: "# Heading\n\ntext\n", hash: "h1" });
+    await app.openPath("/docs/plan.md");
+    await app.handleMenu("find");
+    app.view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: "# Head" })) });
+    await app.handleMenu("find-next");
+    const sel = app.view.state.selection.main;
+    expect(app.view.state.doc.sliceString(sel.from, sel.to)).toBe("# Head");
+  });
 
   it("anchors the browser toggle to the window, not to the tab strip", () => {
     const btn = browserToggle();

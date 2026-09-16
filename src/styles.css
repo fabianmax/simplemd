@@ -114,6 +114,68 @@ html, body, #app {
 }
 .lp-table th { background: var(--band); white-space: nowrap; }
 
+/* --- find panel (@codemirror/search) -------------------------------------- */
+/* The panel is CM's, the look is the app's: same band, same 13px chrome as the
+   tab strip and status bar, so it reads as part of the window. */
+.cm-editor .cm-panels {
+  background: var(--bg);
+  color: var(--fg);
+  border-bottom: 1px solid var(--band);
+}
+.cm-editor .cm-panel.cm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font: 13px -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.cm-editor .cm-panel.cm-search br { display: none; } /* one row, wrapping */
+.cm-editor .cm-panel.cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--fg-dim);
+}
+.cm-editor .cm-textfield {
+  font: inherit;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: var(--bg);
+  color: var(--fg);
+}
+.cm-editor .cm-textfield:focus { outline: 1px solid var(--accent); }
+.cm-editor .cm-panel.cm-search .cm-button {
+  font: inherit;
+  padding: 2px 9px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: var(--bg);
+  background-image: none; /* CM's base theme paints a gradient */
+  color: var(--fg);
+  cursor: pointer;
+}
+.cm-editor .cm-panel.cm-search .cm-button:hover { background: var(--band); }
+/* Replace stays reachable but recessive: this is a review surface first. */
+.cm-editor .cm-panel.cm-search [name="replace"],
+.cm-editor .cm-panel.cm-search [name="replaceAll"] { color: var(--fg-dim); }
+.cm-editor .cm-panel.cm-search [name="close"] {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 15px;
+  cursor: pointer;
+}
+.cm-editor .cm-searchMatch {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 2px;
+}
+.cm-editor .cm-searchMatch-selected {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
 /* --- conflict bar (non-modal) -------------------------------------------- */
 .conflict-bar {
   display: flex;
