@@ -33,14 +33,31 @@ export interface GitInfo {
   entries: GitEntry[];
 }
 export const gitInfo = (dir: string) => invoke<GitInfo>("git_info", { dir });
+
+/** A tab in flight between windows. Carries the BUFFER, not just the path:
+ *  re-reading from disk would discard unsaved edits. */
+export interface Handoff {
+  path: string | null;
+  text: string;
+  dirty: boolean;
+}
+export const newWindow = (handoff: Handoff | null = null, at: [number, number] | null = null) =>
+  invoke<string>("new_window", { handoff, at });
+export const takeHandoff = () => invoke<Handoff | null>("take_handoff");
 export const watchFile = (path: string) => invoke<void>("watch_file", { path });
 export const unwatchFile = (path: string) => invoke<void>("unwatch_file", { path });
 export const writeRecovery = (fileName: string, content: string) =>
   invoke<string>("write_recovery", { fileName, content });
 
+/** Window-SCOPED listeners. The bare `listen()` receives events sent to any
+ *  target, so a menu command routed to one window with `emit_to` still reached
+ *  every window — both halves have to be scoped, or neither is. */
 export const onMenu = (cb: (id: string) => void) =>
-  listen<string>("menu", (e) => cb(e.payload));
-export const onOpenRequest = (cb: () => void) => listen("open-request", () => cb());
+  getCurrentWindow().listen<string>("menu", (e) => cb(e.payload));
+export const onOpenRequest = (cb: () => void) =>
+  getCurrentWindow().listen("open-request", () => cb());
+/** Deliberately app-wide: every window holding this path should reload, and a
+ *  window ignores paths it does not have open. */
 export const onFileChanged = (cb: (path: string, hash: string) => void) =>
   listen<{ path: string; hash: string }>("file-changed", (e) =>
     cb(e.payload.path, e.payload.hash),

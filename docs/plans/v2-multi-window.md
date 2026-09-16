@@ -111,3 +111,39 @@ save in one does not dirty the other.
   working; it has its own test.
 - **Tear-off is the data-loss risk.** Hence: buffer in the payload, and close
   the source tab only after the new window exists.
+
+---
+
+## What verification found (and the plan did not)
+
+Every one of these was invisible to the test suite and showed up only by opening
+two real windows. All three are now fixed, and all three are the same shape:
+an API that *reads* as window-scoped and is not.
+
+1. **Capabilities are scoped by window label.** `capabilities/default.json`
+   listed `"windows": ["main"]`, so a window labelled `win-1` had no permissions
+   at all — not even `event.listen`. The new window opened and sat there inert,
+   reporting only `event.listen not allowed on window "win-1"`. Fixed with the
+   glob `"win-*"`. Anything that opens a window under a new label needs this.
+
+2. **A new window does not reliably raise `Focused(true)`.** Focus was being
+   *remembered* rather than queried (because a macOS menu click leaves every
+   window reporting `is_focused() == false` — the original "route to the focused
+   window" lookup fell straight through to the broadcast it was meant to
+   replace). But a freshly built window never fired the event, so the remembered
+   label stayed `main` and every command kept landing there. `new_window` now
+   calls `set_focus()` and records the label itself.
+
+3. **`Emitter::emit` is app-wide even when called on a `Window`** — and the JS
+   `listen()` receives events sent to *any* target. `w.emit("menu", …)` reads
+   exactly like "send this to w", and does not: the Rust log showed
+   `new-tab -> win-1` while *both* windows opened a tab. Both halves have to be
+   scoped, or neither is: `app.emit_to(label, …)` in Rust, and
+   `getCurrentWindow().listen(…)` in the frontend. `file-changed` deliberately
+   stays a broadcast on both sides.
+
+**Verified in the running app**: New Window opens a second window; one menu
+command reaches exactly one window; and after a real focus change (⌘`) the next
+command follows to the other window. Tab dragging and tear-off are covered by
+the unit and jsdom tests only — a mouse drag inside the webview cannot be
+synthesised from the outside.

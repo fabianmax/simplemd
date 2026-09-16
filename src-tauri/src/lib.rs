@@ -2,6 +2,7 @@ pub mod commands;
 mod git;
 pub mod menu;
 pub mod watcher;
+pub mod window;
 
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, RunEvent};
@@ -30,6 +31,23 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(PendingOpen(Mutex::new(initial)))
         .manage(commands::ActiveWatch(Mutex::new(std::collections::HashMap::new())))
+        .manage(window::PendingHandoff::default())
+        .manage(window::LastFocused::default())
+        // A destroyed window must not strand the watches it held, nor drop the
+        // ones another window is still using.
+        .on_window_event(|window, event| match event {
+            // Remembered here because a menu click makes every window report
+            // "not focused" — see window::LastFocused.
+            tauri::WindowEvent::Focused(true) => {
+                window.state::<window::LastFocused>().set(window.label());
+            }
+            tauri::WindowEvent::Destroyed => {
+                window.state::<commands::ActiveWatch>().release_window(window.label());
+                window.state::<window::PendingHandoff>().forget(window.label());
+                window.state::<window::LastFocused>().clear_if(window.label());
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
             commands::read_file,
             commands::save_file,
@@ -45,6 +63,8 @@ pub fn run() {
             commands::write_recovery,
             take_pending_open,
             git::git_info,
+            window::new_window,
+            window::take_handoff,
         ])
         .setup(|app| {
             let handle = app.handle();
@@ -69,8 +89,18 @@ pub fn run() {
             if !paths.is_empty() {
                 let state = app.state::<PendingOpen>();
                 state.0.lock().unwrap().extend(paths);
-                // Nudge; frontend drains the pending queue.
-                let _ = app.emit("open-request", ());
+                // Nudge the focused window; it drains the pending queue. Sent
+                // to one window so which window a Finder open lands in is
+                // deterministic — a broadcast would race every open window.
+                match window::target(app) {
+                    Some(w) => {
+                        // emit_to, not emit: see the note in menu::attach_handler.
+                        let _ = app.emit_to(w.label(), "open-request", ());
+                    }
+                    None => {
+                        let _ = app.emit("open-request", ());
+                    }
+                }
             }
         }
     });

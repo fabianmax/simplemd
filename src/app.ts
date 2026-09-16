@@ -16,6 +16,14 @@ import { SwitcherUI } from "./switcher-ui";
 import { docStats, formatStats } from "./stats";
 import { BrowserPanel } from "./browser";
 import { TocPanel, extractHeadings, activeHeadingIndex } from "./toc";
+import {
+  reorder,
+  activeAfterMove,
+  dropIndex,
+  moveTarget,
+  shouldTearOff,
+  isDrag,
+} from "./tabdrag";
 import { ICON, svgIcon } from "./icons";
 import { DEFAULT_ZOOM, loadZoom, saveZoom, stepZoom, zoomKeyDirection, zoomLabel } from "./zoom";
 
@@ -57,6 +65,9 @@ export class App {
   private toc: TocPanel;
   private tocToggle: HTMLButtonElement;
   private tocTimer: ReturnType<typeof setTimeout> | null = null;
+  private dropMarker: HTMLElement;
+  /** Set for exactly one click: the one a finished drag would otherwise fire. */
+  private dragged = false;
   private diffCount: HTMLElement;
   private diffNav = 0;
 
@@ -104,6 +115,10 @@ export class App {
     this.tocToggle.setAttribute("aria-label", "Toggle outline");
     this.tocToggle.appendChild(svgIcon(ICON.outline, "chrome-btn-icon"));
     this.tocToggle.onclick = () => this.toggleToc();
+    this.dropMarker = document.createElement("div");
+    this.dropMarker.className = "tab-drop-marker";
+    this.dropMarker.hidden = true;
+    this.tabStrip.appendChild(this.dropMarker);
     this.conflictBar = this.buildConflictBar(column);
     this.emptyState = document.createElement("div");
     this.emptyState.className = "empty-state";
@@ -312,6 +327,102 @@ export class App {
     }, 1400);
   }
 
+  // --- tab dragging -------------------------------------------------------------
+
+  /** Reorder inside the strip, or tear the tab out into its own window. The
+   *  decisions are in tabdrag.ts; this only measures and dispatches. */
+  private beginTabDrag(e: MouseEvent, index: number) {
+    if (e.button !== 0) return;
+    const start = { x: e.clientX, y: e.clientY };
+    let dragging = false;
+    let gap = index;
+
+    const move = (ev: MouseEvent) => {
+      const now = { x: ev.clientX, y: ev.clientY };
+      if (!dragging) {
+        if (!isDrag(start, now)) return; // still a click
+        dragging = true;
+        document.body.classList.add("dragging-tab");
+      }
+      gap = dropIndex(this.tabMidpoints(), now.x);
+      this.showDropMarker(gap);
+    };
+
+    const up = (ev: MouseEvent) => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      document.body.classList.remove("dragging-tab");
+      this.dropMarker.hidden = true;
+      if (!dragging) return;
+      this.dragged = true;
+      // Cleared on the next turn, once the click this drag produced has passed.
+      setTimeout(() => (this.dragged = false), 0);
+      const point = { x: ev.clientX, y: ev.clientY };
+      if (shouldTearOff(point, this.tearOffGeometry())) void this.tearOff(index, point);
+      else this.moveTab(index, moveTarget(index, gap));
+    };
+
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }
+
+  private tabElements(): HTMLElement[] {
+    return [...this.tabStrip.querySelectorAll<HTMLElement>(".tab")];
+  }
+
+  private tabMidpoints(): number[] {
+    return this.tabElements().map((el) => {
+      const r = el.getBoundingClientRect();
+      return r.left + r.width / 2;
+    });
+  }
+
+  private tearOffGeometry() {
+    return {
+      stripBottom: this.tabStrip.getBoundingClientRect().bottom,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    };
+  }
+
+  /** A line in the gap, rather than shuffling the tabs themselves: no layout
+   *  thrash mid-drag, and the hit-testing stays honest. */
+  private showDropMarker(gap: number) {
+    const els = this.tabElements();
+    if (els.length === 0) return;
+    const strip = this.tabStrip.getBoundingClientRect();
+    const edge =
+      gap >= els.length
+        ? els[els.length - 1].getBoundingClientRect().right
+        : els[gap].getBoundingClientRect().left;
+    this.dropMarker.style.left = `${edge - strip.left + this.tabStrip.scrollLeft}px`;
+    this.dropMarker.hidden = false;
+  }
+
+  moveTab(from: number, to: number) {
+    if (to === from || from < 0 || to < 0) return;
+    this.tabs = reorder(this.tabs, from, to);
+    this.active = activeAfterMove(this.active, from, to);
+    this.renderChrome();
+  }
+
+  /** Hand the tab to a new window, then close it here — in that order, so a
+   *  window that fails to open leaves the tab exactly where it was. */
+  async tearOff(index: number, point: { x: number; y: number }) {
+    const tab = this.tabs[index];
+    if (!tab) return;
+    const text =
+      index === this.active ? this.view.state.doc.toString() : tab.state.doc.toString();
+    try {
+      await ipc.newWindow(
+        { path: tab.path, text, dirty: tab.dirty },
+        [window.screenX + point.x - 80, window.screenY + point.y - 16],
+      );
+    } catch {
+      return;
+    }
+    await this.closeTab(index, true);
+  }
+
   /** The menu item (\u2318\u21e7B) and the tab-strip button share this path. */
   async toggleBrowser() {
     const dir = this.activeTab?.path?.replace(/\/[^/]+$/, "") ?? null;
@@ -392,6 +503,7 @@ export class App {
       const tab = this.activeTab;
       if (tab && !tab.diff) tab.baseline = this.view.state.doc.toString();
     });
+    await this.adoptHandoff();
     await this.drainPending();
     this.applyZoom(loadZoom(), false);
     this.renderChrome();
@@ -405,6 +517,8 @@ export class App {
     if (id === "open") {
       const p = await ipc.pickMarkdownFile();
       if (p) await this.openPath(p);
+    } else if (id === "new-window") {
+      await ipc.newWindow();
     } else if (id === "new-tab") {
       this.newUntitledTab();
     } else if (id === "save") {
@@ -446,6 +560,45 @@ export class App {
       diff: null,
     });
     this.switchTo(this.tabs.length - 1);
+  }
+
+  /** A window opened by a tear-off adopts the tab that was dragged out of the
+   *  other window — buffer and dirty flag included, so no edit is re-read from
+   *  disk and lost. */
+  private async adoptHandoff() {
+    let handoff;
+    try {
+      handoff = await ipc.takeHandoff();
+    } catch {
+      return;
+    }
+    if (!handoff) return;
+    const { path, text, dirty } = handoff;
+    // The disk hash is what the file was when it left, so an external write
+    // still registers; a dirty tab keeps its own text either way.
+    let diskHash = "";
+    let eol: Eol = "\n";
+    if (path) {
+      try {
+        const onDisk = await ipc.readFile(path);
+        diskHash = onDisk.hash;
+        eol = fromDisk(onDisk.content).eol;
+      } catch {
+        /* gone from disk: the buffer is all we have, which is the point */
+      }
+    }
+    this.tabs.push({
+      path,
+      state: this.makeState(text),
+      eol,
+      diskHash,
+      dirty,
+      conflict: false,
+      baseline: text,
+      diff: null,
+    });
+    this.switchTo(this.tabs.length - 1);
+    if (path) void ipc.watchFile(path);
   }
 
   async openPath(path: string): Promise<void> {
@@ -514,10 +667,11 @@ export class App {
     if (!tab.diff) tab.baseline = this.view.state.doc.toString();
   }
 
-  async closeTab(index: number) {
+  async closeTab(index: number, force = false) {
     const tab = this.tabs[index];
     if (!tab) return;
-    if (tab.dirty) {
+    // force: the tab moved to another window, nothing is being discarded.
+    if (tab.dirty && !force) {
       if (index !== this.active) this.switchTo(index);
       if (!(await ipc.confirmDiscard(fileName(tab.path)))) return;
     }
@@ -764,7 +918,13 @@ export class App {
           void this.closeTab(i);
         };
         el.append(name, close);
-        el.onclick = () => this.switchTo(i);
+        el.onclick = () => {
+          // A finished drag is followed by a click; that click must not also
+          // switch tabs, or every reorder would change the active tab.
+          if (this.dragged) return;
+          this.switchTo(i);
+        };
+        el.onmousedown = (e) => this.beginTabDrag(e, i);
         el.onauxclick = (e) => {
           if (e.button === 1) void this.closeTab(i);
         };

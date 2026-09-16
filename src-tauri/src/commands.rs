@@ -161,7 +161,72 @@ pub fn resolve_link(base_dir: String, target: String) -> ResolvedLink {
 
 /// Active watches, one per open tab. Dropping a guard unwinds its
 /// debounce thread and forwarding thread.
-pub struct ActiveWatch(pub Mutex<std::collections::HashMap<String, notify::RecommendedWatcher>>);
+/// One watcher per path, refcounted by the windows that asked for it.
+///
+/// Keying by path alone was correct only while there was one window: the second
+/// window's `watch_file` short-circuits on the existing entry, and then the
+/// FIRST window's `unwatch_file` drops the watcher out from under it — a watch
+/// that is silently dead is the exact failure this whole module is built to
+/// avoid. Owners are window labels; the watcher lives until the last one lets go.
+pub struct WatchEntry {
+    pub guard: notify::RecommendedWatcher,
+    pub owners: std::collections::HashSet<String>,
+}
+
+pub struct ActiveWatch(pub Mutex<std::collections::HashMap<String, WatchEntry>>);
+
+impl ActiveWatch {
+    /// Add an owner to an existing watch. False = nothing watches `path` yet.
+    pub fn join(&self, path: &str, label: &str) -> bool {
+        match self.0.lock().unwrap().get_mut(path) {
+            Some(entry) => {
+                entry.owners.insert(label.to_owned());
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn insert(&self, path: String, label: &str, guard: notify::RecommendedWatcher) {
+        self.0.lock().unwrap().insert(
+            path,
+            WatchEntry {
+                guard,
+                owners: std::collections::HashSet::from([label.to_owned()]),
+            },
+        );
+    }
+
+    /// Drop one owner. The watcher survives while any other window holds it.
+    pub fn leave(&self, path: &str, label: &str) {
+        let mut watches = self.0.lock().unwrap();
+        let Some(entry) = watches.get_mut(path) else { return };
+        entry.owners.remove(label);
+        if entry.owners.is_empty() {
+            watches.remove(path); // last owner: dropping the guard stops the watch
+        }
+    }
+
+    /// Release every watch held by one window. Called when a window is destroyed,
+    /// so closing a window never strands a watcher another window still needs.
+    pub fn release_window(&self, label: &str) {
+        let mut watches = self.0.lock().unwrap();
+        watches.retain(|_, e| {
+            e.owners.remove(label);
+            !e.owners.is_empty()
+        });
+    }
+
+    #[cfg(test)]
+    pub fn owners_of(&self, path: &str) -> usize {
+        self.0.lock().unwrap().get(path).map_or(0, |e| e.owners.len())
+    }
+
+    #[cfg(test)]
+    pub fn is_watched(&self, path: &str) -> bool {
+        self.0.lock().unwrap().contains_key(path)
+    }
+}
 
 #[derive(Clone, Serialize)]
 pub struct FileChanged {
@@ -172,19 +237,21 @@ pub struct FileChanged {
 #[tauri::command]
 pub fn watch_file(
     app: AppHandle,
+    window: tauri::Window,
     state: State<ActiveWatch>,
     path: String,
 ) -> Result<(), String> {
-    let mut watches = state.0.lock().unwrap();
-    if watches.contains_key(&path) {
-        return Ok(());
+    if state.join(&path, window.label()) {
+        return Ok(()); // already watched: share the live watcher
     }
     let fw = crate::watcher::watch_file(PathBuf::from(&path), Duration::from_millis(120))
         .map_err(|e| e.to_string())?;
-    watches.insert(path.clone(), fw.guard);
+    state.insert(path.clone(), window.label(), fw.guard);
     let changes = fw.changes;
     std::thread::spawn(move || {
         while let Ok(h) = changes.recv() {
+            // Broadcast is right here: every window holding this path should
+            // reload, and a window ignores paths it does not have open.
             let _ = app.emit("file-changed", FileChanged { path: path.clone(), hash: hex(h) });
         }
     });
@@ -192,8 +259,8 @@ pub fn watch_file(
 }
 
 #[tauri::command]
-pub fn unwatch_file(state: State<ActiveWatch>, path: String) {
-    state.0.lock().unwrap().remove(&path);
+pub fn unwatch_file(window: tauri::Window, state: State<ActiveWatch>, path: String) {
+    state.leave(&path, window.label());
 }
 
 /// Sidecar recovery copy — written the moment a conflict is detected,
@@ -292,6 +359,58 @@ mod tests {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         save_atomic(&path, b"y").unwrap();
         assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+    }
+
+    fn registry() -> ActiveWatch {
+        ActiveWatch(Mutex::new(std::collections::HashMap::new()))
+    }
+
+    /// A guard that watches nothing: these tests are about the refcount, not notify.
+    fn dummy_guard() -> notify::RecommendedWatcher {
+        notify::recommended_watcher(|_res: notify::Result<notify::Event>| {}).unwrap()
+    }
+
+    #[test]
+    fn two_windows_share_one_watch_and_the_first_to_leave_does_not_blind_the_other() {
+        let reg = registry();
+        assert!(!reg.join("/p/plan.md", "win-1"), "nothing watches it yet");
+        reg.insert("/p/plan.md".into(), "win-1", dummy_guard());
+        assert!(reg.join("/p/plan.md", "win-2"), "second window shares it");
+        assert_eq!(reg.owners_of("/p/plan.md"), 2);
+
+        reg.leave("/p/plan.md", "win-1");
+        // The bug this guards: win-1 leaving used to drop the watcher outright,
+        // leaving win-2 with a watch that is silently dead.
+        assert!(reg.is_watched("/p/plan.md"), "win-2 still needs it");
+        assert_eq!(reg.owners_of("/p/plan.md"), 1);
+
+        reg.leave("/p/plan.md", "win-2");
+        assert!(!reg.is_watched("/p/plan.md"), "last owner gone: watch dropped");
+    }
+
+    #[test]
+    fn leaving_twice_or_leaving_an_unwatched_path_is_harmless() {
+        let reg = registry();
+        reg.leave("/never/watched.md", "win-1");
+        reg.insert("/p/a.md".into(), "win-1", dummy_guard());
+        reg.leave("/p/a.md", "win-1");
+        reg.leave("/p/a.md", "win-1");
+        assert!(!reg.is_watched("/p/a.md"));
+    }
+
+    #[test]
+    fn a_destroyed_window_releases_only_its_own_watches() {
+        let reg = registry();
+        reg.insert("/p/shared.md".into(), "win-1", dummy_guard());
+        reg.join("/p/shared.md", "win-2");
+        reg.insert("/p/only-1.md".into(), "win-1", dummy_guard());
+        reg.insert("/p/only-2.md".into(), "win-2", dummy_guard());
+
+        reg.release_window("win-1");
+        assert!(reg.is_watched("/p/shared.md"), "win-2 still holds it");
+        assert_eq!(reg.owners_of("/p/shared.md"), 1);
+        assert!(!reg.is_watched("/p/only-1.md"), "win-1's own watch is gone");
+        assert!(reg.is_watched("/p/only-2.md"), "win-2 untouched");
     }
 
     #[test]

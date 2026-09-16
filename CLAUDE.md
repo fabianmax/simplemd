@@ -376,6 +376,30 @@ six directions on the criterion that it had to survive a 16pt Finder row.
 Regenerate the bundle with `npx tauri icon assets/icon-1024.png`, then delete
 the icons/android and icons/ios output — this is a macOS-only app.
 
+### Multi-window (v2) — three Tauri traps, all verified the hard way
+
+Each of these reads as window-scoped and is not. None is catchable by the test
+suite; all three were found by opening two real windows.
+
+- **Capabilities are keyed by window label.** A window opened as `win-N` gets
+  *no* permissions unless its label is listed in `capabilities/default.json`
+  (`"windows": ["main", "win-*"]`) — not even `event.listen`, so it comes up
+  silently inert.
+- **`Emitter::emit` is app-wide even on a `Window`**, and the JS `listen()`
+  receives events sent to any target. Routing needs both halves:
+  `app.emit_to(label, …)` in Rust **and** `getCurrentWindow().listen(…)` in the
+  frontend. `file-changed` stays a deliberate broadcast.
+- **Focus must be remembered, not queried.** While a macOS menu is tracking,
+  every window reports `is_focused() == false`, so a "route to the focused
+  window" lookup falls through to a broadcast. `window::LastFocused` records
+  `WindowEvent::Focused(true)`; `new_window` also sets it, because a freshly
+  built window does not reliably raise that event.
+
+Also multi-window: the watch registry is refcounted by window label
+(`ActiveWatch`), because keying by path alone let one window's `unwatch_file`
+kill another window's watch — a silently dead watch, the failure this whole
+watcher design exists to avoid.
+
 ## How we build this: agentic-first
 
 This project is an experiment in **agent-first software creation**. The codebase

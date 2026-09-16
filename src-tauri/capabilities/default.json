@@ -1,9 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Capability for every simplemd window. Labels are matched by glob: capabilities are scoped BY WINDOW LABEL, so a window opened as win-N gets no permissions at all unless it is listed here — not even event.listen, which leaves it silently inert.",
   "windows": [
-    "main"
+    "main",
+    "win-*"
   ],
   "permissions": [
     "core:default",

@@ -148,6 +148,7 @@ html, body, #app {
 
 /* --- tab strip -------------------------------------------------------------- */
 .tab-strip {
+  position: relative; /* the drop marker is absolutely placed in here */
   display: flex;
   align-items: center;
   min-height: 28px;
@@ -193,6 +194,23 @@ html, body, #app {
   opacity: 0.5;
 }
 .tab-close:hover { opacity: 1; background: var(--band); }
+
+/* --- tab dragging -------------------------------------------------------------- */
+.tab-drop-marker {
+  position: absolute;
+  top: 3px;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 3;
+}
+.tab-drop-marker[hidden] { display: none; }
+/* Hold the cursor and kill text selection for the whole drag, not just over
+   the tab it started on. */
+body.dragging-tab { cursor: grabbing; user-select: none; }
+body.dragging-tab .tab { cursor: grabbing; }
 
 /* --- quick switcher ---------------------------------------------------------- */
 .switcher {
