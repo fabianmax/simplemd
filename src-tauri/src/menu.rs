@@ -37,6 +37,7 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
     let recent = recent_builder.build()?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&MenuItemBuilder::new("New Window").id("new-window").accelerator("CmdOrCtrl+N").build(app)?)
         .item(&MenuItemBuilder::new("New Tab").id("new-tab").accelerator("CmdOrCtrl+T").build(app)?)
         .item(&MenuItemBuilder::new("Open…").id("open").accelerator("CmdOrCtrl+O").build(app)?)
         .item(&recent)
@@ -180,11 +181,27 @@ pub fn attach_handler(app: &AppHandle) {
     app.on_menu_event(|app, event| {
         #[cfg(debug_assertions)]
         if event.id().as_ref() == "devtools" {
-            if let Some(w) = app.get_webview_window("main") {
+            if let Some(w) = crate::window::target(app) {
                 w.open_devtools();
             }
             return;
         }
-        let _ = app.emit("menu", event.id().as_ref());
+        // To the focused window, never a broadcast: the menu is app-global, so
+        // broadcasting made one ⌘S save in every window and one ⌘W close a tab
+        // in each.
+        //
+        // It must be `emit_to`. `Emitter::emit` is app-wide even when called on
+        // a Window — `w.emit(...)` reads like it targets w, and does not; that
+        // cost an afternoon, with the Rust side logging the right label while
+        // both windows acted on the event.
+        match crate::window::target(app) {
+            Some(w) => {
+                let _ = app.emit_to(w.label(), "menu", event.id().as_ref());
+            }
+            // Nothing to route to: better to land somewhere than vanish.
+            None => {
+                let _ = app.emit("menu", event.id().as_ref());
+            }
+        }
     });
 }
