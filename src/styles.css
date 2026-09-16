@@ -94,13 +94,25 @@ html, body, #app {
 /* overflow-x rather than a squeezed layout: macOS overlay scrollbars take no
    layout height, so the widget's measured height is unchanged. */
 .lp-table { padding: 2px 0; overflow-x: auto; }
-.lp-table table { border-collapse: collapse; }
+/* width:100% so the columns have the whole measure to divide — shrink-to-fit
+   left a table wrapping inside half the line while the other half sat empty.
+   table-layout stays auto: content decides the split, the measure only sets
+   how much there is to split. */
+.lp-table table { border-collapse: collapse; width: 100%; table-layout: auto; }
 .lp-table th, .lp-table td {
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
   padding: 6px 12px;
   text-align: left;
+  vertical-align: top;
+  /* Floor and ceiling on one column's share: without the floor a "Status"
+     column collapses to one character per line next to a prose column; without
+     the ceiling a single long sentence takes everything. Both are hints to the
+     auto layout, not fixed widths. */
+  min-width: 7ch;
+  max-width: 48ch;
+  overflow-wrap: anywhere; /* a long path or URL must not force a scrollbar */
 }
-.lp-table th { background: var(--band); }
+.lp-table th { background: var(--band); white-space: nowrap; }
 
 /* --- conflict bar (non-modal) -------------------------------------------- */
 .conflict-bar {
