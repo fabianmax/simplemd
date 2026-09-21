@@ -12,6 +12,7 @@ vi.mock("../src/ipc", () => ({
 
 import {
   BrowserPanel,
+  sortsAfter,
   entryKind,
   clampWidth,
   MIN_WIDTH,
@@ -47,12 +48,18 @@ describe("entryKind", () => {
 describe("BrowserPanel", () => {
   let parent: HTMLElement;
   let opened: string[];
+  let newFileIn: string[];
   let panel: BrowserPanel;
 
   beforeEach(() => {
     parent = document.createElement("div");
     opened = [];
-    panel = new BrowserPanel(parent, (p) => opened.push(p));
+    newFileIn = [];
+    panel = new BrowserPanel(
+      parent,
+      (p) => opened.push(p),
+      (dir) => newFileIn.push(dir),
+    );
     listDir.mockReset();
     pickFolder.mockReset();
     gitInfo.mockReset();
@@ -320,5 +327,57 @@ describe("BrowserPanel", () => {
       expect(names(parent)).toEqual(["a.md"]);
     });
     expect(listDir).toHaveBeenCalledWith("/picked");
+  });
+
+  it("asks for a new file in the folder it is rooted at (#7)", async () => {
+    listDir.mockResolvedValueOnce([entry("plan.md", false)]);
+    await panel.toggle("/root", null);
+    const add = [...parent.querySelectorAll<HTMLButtonElement>(".browser-header button")].find(
+      (b) => b.textContent === "+",
+    )!;
+    expect(add).not.toBeUndefined();
+    add.click();
+    expect(newFileIn).toEqual(["/root"]);
+  });
+
+  it("slots a created file into the level without re-reading it (#7)", async () => {
+    listDir.mockResolvedValueOnce([
+      entry("sub", true),
+      entry("alpha.md", false),
+      entry("zeta.md", false),
+    ]);
+    await panel.toggle("/root", null);
+    listDir.mockClear();
+
+    panel.insertFile("/root/beta.md");
+    expect(names(parent)).toEqual(["sub", "alpha.md", "beta.md", "zeta.md"]);
+    expect(listDir).not.toHaveBeenCalled(); // a refresh would collapse the tree
+
+    // the new row behaves like any other
+    const row = parent.querySelector<HTMLElement>('[data-path="/root/beta.md"]')!;
+    row.click();
+    expect(opened).toEqual(["/root/beta.md"]);
+  });
+
+  it("ignores a created file in a directory that is not on screen", async () => {
+    listDir.mockResolvedValueOnce([entry("plan.md", false)]);
+    await panel.toggle("/root", null);
+    panel.insertFile("/elsewhere/new.md");
+    expect(names(parent)).toEqual(["plan.md"]);
+  });
+
+  it("never inserts the same path twice", async () => {
+    listDir.mockResolvedValueOnce([entry("plan.md", false)]);
+    await panel.toggle("/root", null);
+    panel.insertFile("/root/plan.md");
+    expect(names(parent)).toEqual(["plan.md"]);
+  });
+});
+
+describe("sortsAfter", () => {
+  it("mirrors list_dir's case-insensitive comparison", () => {
+    expect(sortsAfter("Zeta.md", "beta.md")).toBe(true);
+    expect(sortsAfter("alpha.md", "beta.md")).toBe(false);
+    expect(sortsAfter("Beta.md", "beta.md")).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const ipcStub = vi.hoisted(() => ({
   readFile: vi.fn(async () => ({ content: "# doc\n", hash: "h1" })),
   saveFile: vi.fn(async () => "h1"),
+  createFile: vi.fn(async () => true),
   addRecent: vi.fn(async () => {}),
   getRecents: vi.fn(async () => [] as string[]),
   listDir: vi.fn(async () => [] as unknown[]),
@@ -20,6 +21,7 @@ const ipcStub = vi.hoisted(() => ({
   resolveLink: vi.fn(async () => ({ path: "", exists: false, is_md: false })),
   showFormatMenu: vi.fn(async () => {}),
   log: vi.fn(() => {}),
+  trace: vi.fn(() => {}),
   pickMarkdownFile: vi.fn(async () => null),
   pickSavePath: vi.fn(async () => null),
   pickFolder: vi.fn(async () => null),
@@ -27,6 +29,9 @@ const ipcStub = vi.hoisted(() => ({
   gitInfo: vi.fn(async () => ({ branch: null as string | null, entries: [] })),
   newWindow: vi.fn(async () => "win-2"),
   takeHandoff: vi.fn(async () => null as null | { path: string | null; text: string; dirty: boolean }),
+  setSession: vi.fn(async () => {}),
+  takeRestore: vi.fn(async () => null as null | { paths: string[]; active: string | null }),
+  takePendingMenu: vi.fn(async () => [] as string[]),
 }));
 vi.mock("../src/ipc", () => ipcStub);
 vi.mock("@tauri-apps/api/webview", () => ({
@@ -43,6 +48,8 @@ describe("window chrome", () => {
   let app: App;
 
   beforeEach(async () => {
+    // Call counts must not leak between tests; implementations stay.
+    vi.clearAllMocks();
     vi.stubGlobal("localStorage", {
       getItem: () => null,
       setItem: () => {},
@@ -88,6 +95,138 @@ describe("window chrome", () => {
     await app.handleMenu("find-next");
     const sel = app.view.state.selection.main;
     expect(app.view.state.doc.sliceString(sel.from, sel.to)).toBe("# Head");
+  });
+
+  it("creates a file on disk and opens it, seeded with the active folder (#7)", async () => {
+    await app.openPath("/work/simplemd/plan.md");
+    ipcStub.pickSavePath.mockResolvedValueOnce("/work/simplemd/notes.md");
+
+    await app.handleMenu("new-file");
+
+    expect(ipcStub.pickSavePath).toHaveBeenCalledWith("/work/simplemd/Untitled.md");
+    expect(ipcStub.createFile).toHaveBeenCalledWith("/work/simplemd/notes.md");
+    expect(app.tabs.map((t) => t.path)).toEqual([
+      "/work/simplemd/plan.md",
+      "/work/simplemd/notes.md",
+    ]);
+  });
+
+  it("appends .md to a name typed without one (#7)", async () => {
+    ipcStub.pickSavePath.mockResolvedValueOnce("/work/notes");
+    await app.newFile("/work");
+    expect(ipcStub.createFile).toHaveBeenCalledWith("/work/notes.md");
+  });
+
+  it("does nothing when the save panel is cancelled (#7)", async () => {
+    ipcStub.pickSavePath.mockResolvedValueOnce(null);
+    await app.newFile("/work");
+    expect(ipcStub.createFile).not.toHaveBeenCalled();
+    expect(app.tabs).toHaveLength(0);
+  });
+
+  it("still opens the file when it was already there (#7)", async () => {
+    // create_file reports false for an existing file and leaves it alone.
+    ipcStub.pickSavePath.mockResolvedValueOnce("/work/plan.md");
+    ipcStub.createFile.mockResolvedValueOnce(false);
+    ipcStub.readFile.mockResolvedValueOnce({ content: "# real content\n", hash: "h9" });
+
+    await app.newFile("/work");
+
+    expect(app.tabs.map((t) => t.path)).toEqual(["/work/plan.md"]);
+    expect(app.view.state.doc.toString()).toBe("# real content\n");
+  });
+
+  it("reopens the tabs the last window had, front tab included (#10)", async () => {
+    // A fresh app, told what was open when the last one went away.
+    ipcStub.takeRestore.mockResolvedValueOnce({
+      paths: ["/work/plan.md", "/work/notes.md"],
+      active: "/work/plan.md",
+    });
+    const restored = new App(document.createElement("div"));
+    await restored.init();
+
+    expect(restored.tabs.map((t) => t.path)).toEqual(["/work/plan.md", "/work/notes.md"]);
+    expect(restored.tabs[restored.active].path).toBe("/work/plan.md");
+  });
+
+  it("skips a restored file that is gone from disk (#10)", async () => {
+    ipcStub.takeRestore.mockResolvedValueOnce({
+      paths: ["/work/gone.md", "/work/notes.md"],
+      active: null,
+    });
+    ipcStub.readFile.mockRejectedValueOnce(new Error("No such file"));
+    const restored = new App(document.createElement("div"));
+    await restored.init();
+
+    expect(restored.tabs.map((t) => t.path)).toEqual(["/work/notes.md"]);
+  });
+
+  it("reports the open tabs, coalesced (#10)", async () => {
+    vi.useFakeTimers();
+    try {
+      await app.openPath("/work/plan.md");
+      await app.openPath("/work/notes.md");
+      expect(ipcStub.setSession).not.toHaveBeenCalled(); // not on every render
+      await vi.advanceTimersByTimeAsync(500);
+      expect(ipcStub.setSession).toHaveBeenCalledTimes(1);
+      expect(ipcStub.setSession).toHaveBeenLastCalledWith(
+        ["/work/plan.md", "/work/notes.md"],
+        "/work/notes.md",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("remembers that the last tab was closed (#10)", async () => {
+    vi.useFakeTimers();
+    try {
+      await app.openPath("/work/plan.md");
+      await vi.advanceTimersByTimeAsync(500);
+      expect(ipcStub.setSession).toHaveBeenLastCalledWith(["/work/plan.md"], "/work/plan.md");
+
+      await app.closeTab(0);
+      await vi.advanceTimersByTimeAsync(500);
+      // A tab the reader closed must not come back on the next launch.
+      expect(ipcStub.setSession).toHaveBeenLastCalledWith([], null);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a window that never held a tab does not wipe the session (#10)", async () => {
+    vi.useFakeTimers();
+    try {
+      const empty = new App(document.createElement("div"));
+      await empty.init(); // ⌘N: no restore, no files
+      empty.renderChrome();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(ipcStub.setSession).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("runs a menu command that was queued while no window was open (#11)", async () => {
+    ipcStub.takePendingMenu.mockResolvedValueOnce(["new-tab"]);
+    const woken = new App(document.createElement("div"));
+    await woken.init();
+    expect(woken.tabs.map((t) => t.path)).toEqual([null]); // ⌘T got its tab
+  });
+
+  it("tells same-named tabs apart with a folder tail (#8)", async () => {
+    await app.openPath("/work/simplemd/plan.md");
+    await app.openPath("/work/other/plan.md");
+    await app.openPath("/work/simplemd/readme.md");
+
+    const names = [...root.querySelectorAll(".tab .tab-name")].map((e) => e.textContent);
+    expect(names).toEqual(["plan.md", "plan.md", "readme.md"]);
+    const tabs = [...root.querySelectorAll(".tab")];
+    expect(tabs.map((t) => t.querySelector(".tab-hint")?.textContent ?? "")).toEqual([
+      "simplemd",
+      "other",
+      "", // unique name, nothing to disambiguate
+    ]);
   });
 
   it("anchors the browser toggle to the window, not to the tab strip", () => {

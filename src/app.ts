@@ -25,6 +25,8 @@ import {
   isDrag,
 } from "./tabdrag";
 import { ICON, svgIcon } from "./icons";
+import { tabLabels } from "./tabname";
+import { timer } from "./trace";
 import { DEFAULT_ZOOM, loadZoom, saveZoom, stepZoom, zoomKeyDirection, zoomLabel } from "./zoom";
 import { captureAnchor, restoredScrollTop, type Heights } from "./viewport";
 import { openSearchPanel, findNext, findPrevious } from "@codemirror/search";
@@ -71,6 +73,9 @@ export class App {
   /** Set for exactly one click: the one a finished drag would otherwise fire. */
   private dragged = false;
   private diffCount: HTMLElement;
+  private sessionTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Has this window ever held a tab? Until it has, it must not report. */
+  private sessionArmed = false;
   private diffNav = 0;
 
   constructor(parent: HTMLElement) {
@@ -80,7 +85,11 @@ export class App {
     const mainRow = document.createElement("div");
     mainRow.className = "main-row";
     parent.appendChild(mainRow);
-    this.browser = new BrowserPanel(mainRow, (path) => void this.openAnyPath(path));
+    this.browser = new BrowserPanel(
+      mainRow,
+      (path) => void this.openAnyPath(path),
+      (dir) => void this.newFile(dir),
+    );
     const column = document.createElement("div");
     column.className = "editor-column";
     mainRow.appendChild(column);
@@ -512,25 +521,77 @@ export class App {
   // --- lifecycle ---------------------------------------------------------------
 
   async init() {
-    await ipc.onMenu((id) => this.handleMenu(id));
-    await ipc.onOpenRequest(() => this.drainPending());
-    await ipc.onFileChanged((p, h) => this.handleFileChanged(p, h));
-    await getCurrentWebview().onDragDropEvent((e) => {
-      if (e.payload.type === "drop") {
-        for (const p of e.payload.paths) {
-          if (/\.(md|markdown)$/i.test(p)) void this.openPath(p);
+    // The document is what the reader is waiting for, so ask for it in the same
+    // breath as the listeners rather than behind four serial round trips (#9).
+    // A nudge that arrives before its listener exists is harmless: PendingOpen
+    // is the single source of truth and is drained below either way.
+    const handoff = ipc.takeHandoff().catch(() => null);
+    const pending = ipc.takePendingOpen().catch(() => [] as string[]);
+    const listeners = Promise.all([
+      ipc.onMenu((id) => this.handleMenu(id)),
+      ipc.onOpenRequest(() => this.drainPending()),
+      ipc.onFileChanged((p, h) => this.handleFileChanged(p, h)),
+      getCurrentWebview().onDragDropEvent((e) => {
+        if (e.payload.type === "drop") {
+          for (const p of e.payload.paths) {
+            if (/\.(md|markdown)$/i.test(p)) void this.openPath(p);
+          }
         }
-      }
-    });
+      }),
+    ]);
+    // Only the focused window writes the session (the Rust side enforces it),
+    // so a window that regains focus has to claim it back.
+    window.addEventListener("focus", () => this.saveSession());
     // Snapshot the baseline whenever the user looks away from the window.
     window.addEventListener("blur", () => {
       const tab = this.activeTab;
       if (tab && !tab.diff) tab.baseline = this.view.state.doc.toString();
     });
-    await this.adoptHandoff();
-    await this.drainPending();
+    await this.adoptHandoff(await handoff);
+    await this.restoreSession();
+    for (const p of await pending) await this.openPath(p);
     this.applyZoom(loadZoom(), false);
     this.renderChrome();
+    await listeners;
+    // A menu command that arrived while no window was open (⌘O from the Dock
+    // app with everything closed) waits for the window it asked for.
+    for (const id of await ipc.takePendingMenu().catch(() => [])) await this.handleMenu(id);
+  }
+
+  /** Reopen the tabs the last window had. Files that have since been deleted or
+   *  renamed are skipped in silence: a restore is not the moment to argue. */
+  private async restoreSession() {
+    const session = await ipc.takeRestore().catch(() => null);
+    if (!session) return;
+    // Even if every file turns out to be gone, this window owns the session
+    // now: reporting the empty result clears paths that no longer exist.
+    this.sessionArmed = true;
+    for (const p of session.paths) {
+      try {
+        await this.openPath(p);
+      } catch {
+        /* gone from disk */
+      }
+    }
+    const front = this.tabs.findIndex((t) => t.path === session.active);
+    if (front >= 0) this.switchTo(front);
+  }
+
+  /** Report the open tabs, coalesced: renderChrome runs on every keystroke that
+   *  flips the dirty dot, and this is a disk write on the other side.
+   *
+   *  Empty IS reported once this window has held a tab — closing the last tab
+   *  is a decision, and a tab the reader closed must not come back. Before
+   *  that it is not: a window that never held a tab (⌘N, or one still
+   *  restoring) would otherwise wipe the session it was about to be given. */
+  private saveSession() {
+    if (this.tabs.length > 0) this.sessionArmed = true;
+    if (!this.sessionArmed) return;
+    if (this.sessionTimer) clearTimeout(this.sessionTimer);
+    this.sessionTimer = setTimeout(() => {
+      const paths = this.tabs.map((t) => t.path).filter((p): p is string => p !== null);
+      void ipc.setSession(paths, this.activeTab?.path ?? null);
+    }, 400);
   }
 
   private async drainPending() {
@@ -545,6 +606,8 @@ export class App {
       await ipc.newWindow();
     } else if (id === "new-tab") {
       this.newUntitledTab();
+    } else if (id === "new-file") {
+      await this.newFile();
     } else if (id === "save") {
       await this.save();
     } else if (id === "close-tab") {
@@ -578,6 +641,29 @@ export class App {
 
   // --- tabs ---------------------------------------------------------------------
 
+  /** Create a file on disk and open it (#7). An existing file is opened, never
+   *  replaced — the save panel offers "Replace" for a name that exists, and
+   *  replacing here would mean deleting a document to make an empty one. */
+  async newFile(dir: string | null = this.activeDir()) {
+    const picked = await ipc.pickSavePath(dir ? `${dir}/Untitled.md` : undefined);
+    if (!picked) return;
+    const path = /\.(md|markdown)$/i.test(picked) ? picked : `${picked}.md`;
+    try {
+      await ipc.createFile(path);
+    } catch (e) {
+      void ipc.log(`create failed: ${String(e)}`);
+      return;
+    }
+    await this.openPath(path);
+    this.browser.insertFile(path);
+  }
+
+  /** Directory of the active file — where a new file belongs by default. */
+  private activeDir(): string | null {
+    const p = this.activeTab?.path;
+    return p ? p.replace(/\/[^/]+$/, "") : this.browser.rootDir;
+  }
+
   newUntitledTab() {
     this.tabs.push({
       path: null,
@@ -595,13 +681,7 @@ export class App {
   /** A window opened by a tear-off adopts the tab that was dragged out of the
    *  other window — buffer and dirty flag included, so no edit is re-read from
    *  disk and lost. */
-  private async adoptHandoff() {
-    let handoff;
-    try {
-      handoff = await ipc.takeHandoff();
-    } catch {
-      return;
-    }
+  private async adoptHandoff(handoff: ipc.Handoff | null) {
     if (!handoff) return;
     const { path, text, dirty } = handoff;
     // The disk hash is what the file was when it left, so an external write
@@ -637,7 +717,9 @@ export class App {
       this.switchTo(existing);
       return;
     }
+    const t = timer(`open ${fileName(path)}`);
     const { content, hash } = await ipc.readFile(path);
+    t.lap("read");
     const { text, eol } = fromDisk(content);
     const tab: Tab = {
       path,
@@ -649,8 +731,11 @@ export class App {
       baseline: text,
       diff: null,
     };
+    t.lap("state");
     this.tabs.push(tab);
     this.switchTo(this.tabs.length - 1);
+    t.lap("shown");
+    t.done(); // rAF is throttled in a background window; see main.ts
     void ipc.addRecent(path);
     void ipc.watchFile(path);
   }
@@ -925,6 +1010,9 @@ export class App {
     this.syncBrowserToggle();
     this.syncPreviewToggle();
 
+    // Same-named tabs (plan.md from three repos) carry the directory tail that
+    // tells them apart; a unique name stays undecorated.
+    const labels = tabLabels(this.tabs.map((t) => t.path));
     this.tabStrip.replaceChildren(
       ...this.tabs.map((t, i) => {
         const el = document.createElement("div");
@@ -933,7 +1021,8 @@ export class App {
           (i === this.active ? " tab-active" : "") +
           (t.conflict ? " tab-conflict" : "");
         const name = document.createElement("span");
-        name.textContent = fileName(t.path);
+        name.className = "tab-name";
+        name.textContent = labels[i].name;
         name.title = t.path ?? "Untitled";
         if (t.dirty) {
           const dot = document.createElement("span");
@@ -947,7 +1036,14 @@ export class App {
           e.stopPropagation();
           void this.closeTab(i);
         };
-        el.append(name, close);
+        el.append(name);
+        if (labels[i].hint) {
+          const hint = document.createElement("span");
+          hint.className = "tab-hint";
+          hint.textContent = labels[i].hint;
+          el.appendChild(hint);
+        }
+        el.appendChild(close);
         el.onclick = () => {
           // A finished drag is followed by a click; that click must not also
           // switch tabs, or every reorder would change the active tab.
@@ -984,6 +1080,7 @@ export class App {
 
     const title = tab ? `${tab.dirty ? "• " : ""}${fileName(tab.path)} — simplemd` : "simplemd";
     void ipc.setTitle(title);
+    this.saveSession();
   }
 }
 

@@ -14,6 +14,9 @@ export interface FileContent {
 export const readFile = (path: string) => invoke<FileContent>("read_file", { path });
 export const saveFile = (path: string, content: string) =>
   invoke<string>("save_file", { path, content });
+/** True when the file was created, false when one was already there (which is
+ *  left untouched — see the Rust side). */
+export const createFile = (path: string) => invoke<boolean>("create_file", { path });
 export const addRecent = (path: string) => invoke<void>("add_recent", { path });
 export const getRecents = () => invoke<string[]>("get_recents");
 export interface DirEntry {
@@ -44,6 +47,16 @@ export interface Handoff {
 export const newWindow = (handoff: Handoff | null = null, at: [number, number] | null = null) =>
   invoke<string>("new_window", { handoff, at });
 export const takeHandoff = () => invoke<Handoff | null>("take_handoff");
+/** Which tabs are open, so the next launch lands where this one left off. */
+export interface Session {
+  paths: string[];
+  active: string | null;
+}
+export const setSession = (paths: string[], active: string | null) =>
+  invoke<void>("set_session", { paths, active });
+export const takeRestore = () => invoke<Session | null>("take_restore");
+/** Menu commands that arrived while no window was open. */
+export const takePendingMenu = () => invoke<string[]>("take_pending_menu");
 export const watchFile = (path: string) => invoke<void>("watch_file", { path });
 export const unwatchFile = (path: string) => invoke<void>("unwatch_file", { path });
 export const writeRecovery = (fileName: string, content: string) =>
@@ -75,6 +88,8 @@ export const resolveLink = (baseDir: string, target: string) =>
   invoke<ResolvedLink>("resolve_link", { baseDir, target });
 export const showFormatMenu = () => invoke<void>("show_format_menu");
 export const log = (msg: string) => invoke<void>("frontend_log", { msg }).catch(() => {});
+/** Timing line; printed only when SIMPLEMD_TRACE is set (see the Rust side). */
+export const trace = (marks: string) => invoke<void>("trace", { marks }).catch(() => {});
 
 export async function pickMarkdownFile(): Promise<string | null> {
   const picked = await openDialog({
@@ -84,9 +99,9 @@ export async function pickMarkdownFile(): Promise<string | null> {
   return typeof picked === "string" ? picked : null;
 }
 
-export async function pickSavePath(): Promise<string | null> {
+export async function pickSavePath(defaultPath = "Untitled.md"): Promise<string | null> {
   const picked = await saveDialog({
-    defaultPath: "Untitled.md",
+    defaultPath,
     filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
   });
   return picked ?? null;

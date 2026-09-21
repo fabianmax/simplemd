@@ -76,6 +76,36 @@ pub struct DirEntry {
 /// (CLAUDE.md): no recursion, no cache, no vault. Shows ALL files except
 /// dotfiles (user feedback 2026-09-01); non-markdown files open with the
 /// system default app.
+/// Create an empty file. Returns whether it was actually created: an existing
+/// file is left ALONE and reported as `false`, never truncated. The macOS save
+/// panel offers "Replace" for a name that exists, and replacing here would mean
+/// deleting a document to make an empty one — the one unacceptable bug class.
+/// The caller opens the path either way.
+#[tauri::command]
+pub fn create_file(path: String) -> Result<bool, String> {
+    match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+        Ok(_) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(format!("Cannot create {path}: {e}")),
+    }
+}
+
+/// Process start, so a frontend timing line can be placed against it.
+pub struct Boot(pub std::time::Instant);
+
+/// Timing from the frontend. Silent unless SIMPLEMD_TRACE is set: measuring is
+/// a development activity, and stdout is nobody's UI in a bundled app.
+#[tauri::command]
+pub fn trace(boot: State<Boot>, marks: String) {
+    if std::env::var_os("SIMPLEMD_TRACE").is_none() {
+        return;
+    }
+    println!(
+        "trace: {marks} | +{:.1}ms since process start",
+        boot.0.elapsed().as_secs_f64() * 1000.0
+    );
+}
+
 #[tauri::command]
 pub fn frontend_log(msg: String) {
     eprintln!("[frontend] {msg}");
@@ -328,6 +358,20 @@ mod tests {
             .join(format!("{:?}", std::thread::current().id()));
         fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn create_file_never_truncates_an_existing_one() {
+        let dir = tempdir();
+        let path = dir.join("new.md");
+        let _ = fs::remove_file(&path);
+        let p = path.to_string_lossy().into_owned();
+
+        assert!(create_file(p.clone()).unwrap(), "first call creates");
+        fs::write(&path, b"# real content\n").unwrap();
+
+        assert!(!create_file(p).unwrap(), "second call reports it existed");
+        assert_eq!(fs::read(&path).unwrap(), b"# real content\n");
     }
 
     #[test]

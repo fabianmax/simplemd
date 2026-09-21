@@ -21,7 +21,16 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
         .hide_others()
         .show_all()
         .separator()
-        .quit()
+        // NOT the predefined quit: that terminates the process directly, and
+        // the run loop cannot tell it apart from "the last window closed",
+        // which now keeps the app alive. Ours exits programmatically, which is
+        // the exit the run loop lets through.
+        .item(
+            &MenuItemBuilder::new("Quit simplemd")
+                .id("quit")
+                .accelerator("CmdOrCtrl+Q")
+                .build(app)?,
+        )
         .build()?;
 
     let mut recent_builder = SubmenuBuilder::new(app, "Open Recent");
@@ -39,6 +48,12 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&MenuItemBuilder::new("New Window").id("new-window").accelerator("CmdOrCtrl+N").build(app)?)
         .item(&MenuItemBuilder::new("New Tab").id("new-tab").accelerator("CmdOrCtrl+T").build(app)?)
+        .item(
+            &MenuItemBuilder::new("New File…")
+                .id("new-file")
+                .accelerator("CmdOrCtrl+Shift+N")
+                .build(app)?,
+        )
         .item(&MenuItemBuilder::new("Open…").id("open").accelerator("CmdOrCtrl+O").build(app)?)
         .item(&recent)
         .separator()
@@ -195,6 +210,27 @@ pub fn attach_handler(app: &AppHandle) {
         if event.id().as_ref() == "devtools" {
             if let Some(w) = crate::window::target(app) {
                 w.open_devtools();
+            }
+            return;
+        }
+        if std::env::var_os("SIMPLEMD_TRACE").is_some() {
+            println!("trace: menu {}", event.id().as_ref());
+        }
+        if event.id().as_ref() == "quit" {
+            app.exit(0);
+            return;
+        }
+        // With no window left (the app parks in the Dock rather than quitting),
+        // a menu command has nowhere to land: open a window and let it pick the
+        // command up the way it picks up files. "New Window" is already served
+        // by the opening itself.
+        if crate::window::target(app).is_none() && app.webview_windows().is_empty() {
+            let id = event.id().as_ref().to_owned();
+            if id == "new-window" {
+                let _ = crate::window::new_window(app.clone(), None, None); // empty, as asked
+            } else {
+                app.state::<crate::PendingMenu>().0.lock().unwrap().push(id);
+                crate::wake_window(app);
             }
             return;
         }
