@@ -26,6 +26,7 @@ import {
 } from "./tabdrag";
 import { ICON, svgIcon } from "./icons";
 import { tabLabels } from "./tabname";
+import { timer } from "./trace";
 import { DEFAULT_ZOOM, loadZoom, saveZoom, stepZoom, zoomKeyDirection, zoomLabel } from "./zoom";
 import { captureAnchor, restoredScrollTop, type Heights } from "./viewport";
 import { openSearchPanel, findNext, findPrevious } from "@codemirror/search";
@@ -517,25 +518,34 @@ export class App {
   // --- lifecycle ---------------------------------------------------------------
 
   async init() {
-    await ipc.onMenu((id) => this.handleMenu(id));
-    await ipc.onOpenRequest(() => this.drainPending());
-    await ipc.onFileChanged((p, h) => this.handleFileChanged(p, h));
-    await getCurrentWebview().onDragDropEvent((e) => {
-      if (e.payload.type === "drop") {
-        for (const p of e.payload.paths) {
-          if (/\.(md|markdown)$/i.test(p)) void this.openPath(p);
+    // The document is what the reader is waiting for, so ask for it in the same
+    // breath as the listeners rather than behind four serial round trips (#9).
+    // A nudge that arrives before its listener exists is harmless: PendingOpen
+    // is the single source of truth and is drained below either way.
+    const handoff = ipc.takeHandoff().catch(() => null);
+    const pending = ipc.takePendingOpen().catch(() => [] as string[]);
+    const listeners = Promise.all([
+      ipc.onMenu((id) => this.handleMenu(id)),
+      ipc.onOpenRequest(() => this.drainPending()),
+      ipc.onFileChanged((p, h) => this.handleFileChanged(p, h)),
+      getCurrentWebview().onDragDropEvent((e) => {
+        if (e.payload.type === "drop") {
+          for (const p of e.payload.paths) {
+            if (/\.(md|markdown)$/i.test(p)) void this.openPath(p);
+          }
         }
-      }
-    });
+      }),
+    ]);
     // Snapshot the baseline whenever the user looks away from the window.
     window.addEventListener("blur", () => {
       const tab = this.activeTab;
       if (tab && !tab.diff) tab.baseline = this.view.state.doc.toString();
     });
-    await this.adoptHandoff();
-    await this.drainPending();
+    await this.adoptHandoff(await handoff);
+    for (const p of await pending) await this.openPath(p);
     this.applyZoom(loadZoom(), false);
     this.renderChrome();
+    await listeners;
   }
 
   private async drainPending() {
@@ -625,13 +635,7 @@ export class App {
   /** A window opened by a tear-off adopts the tab that was dragged out of the
    *  other window — buffer and dirty flag included, so no edit is re-read from
    *  disk and lost. */
-  private async adoptHandoff() {
-    let handoff;
-    try {
-      handoff = await ipc.takeHandoff();
-    } catch {
-      return;
-    }
+  private async adoptHandoff(handoff: ipc.Handoff | null) {
     if (!handoff) return;
     const { path, text, dirty } = handoff;
     // The disk hash is what the file was when it left, so an external write
@@ -667,7 +671,9 @@ export class App {
       this.switchTo(existing);
       return;
     }
+    const t = timer(`open ${fileName(path)}`);
     const { content, hash } = await ipc.readFile(path);
+    t.lap("read");
     const { text, eol } = fromDisk(content);
     const tab: Tab = {
       path,
@@ -679,8 +685,11 @@ export class App {
       baseline: text,
       diff: null,
     };
+    t.lap("state");
     this.tabs.push(tab);
     this.switchTo(this.tabs.length - 1);
+    t.lap("shown");
+    t.done(); // rAF is throttled in a background window; see main.ts
     void ipc.addRecent(path);
     void ipc.watchFile(path);
   }

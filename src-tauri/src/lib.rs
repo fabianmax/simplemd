@@ -20,6 +20,7 @@ fn take_pending_open(state: tauri::State<PendingOpen>) -> Vec<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let boot = std::time::Instant::now();
     // Dev/CLI fallback: `simplemd path.md` (Launch Services is the primary path).
     let initial: Vec<String> = std::env::args()
         .skip(1)
@@ -30,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(PendingOpen(Mutex::new(initial)))
+        .manage(commands::Boot(boot))
         .manage(commands::ActiveWatch(Mutex::new(std::collections::HashMap::new())))
         .manage(window::PendingHandoff::default())
         .manage(window::LastFocused::default())
@@ -59,6 +61,7 @@ pub fn run() {
             commands::open_external,
             menu::show_format_menu,
             commands::frontend_log,
+            commands::trace,
             commands::watch_file,
             commands::unwatch_file,
             commands::write_recovery,
@@ -67,11 +70,40 @@ pub fn run() {
             window::new_window,
             window::take_handoff,
         ])
-        .setup(|app| {
+        .on_page_load(move |_w, payload| {
+            // Splits the pre-JS half of startup: process -> page start -> script
+            // done. Only under SIMPLEMD_TRACE; see commands::trace.
+            if std::env::var_os("SIMPLEMD_TRACE").is_some() {
+                println!(
+                    "trace: page {:?} | +{:.1}ms since process start",
+                    payload.event(),
+                    boot.elapsed().as_secs_f64() * 1000.0
+                );
+            }
+        })
+        .setup(move |app| {
+            let t = |what: &str| {
+                if std::env::var_os("SIMPLEMD_TRACE").is_some() {
+                    println!(
+                        "trace: {what} | +{:.1}ms since process start",
+                        boot.elapsed().as_secs_f64() * 1000.0
+                    );
+                }
+            };
+            t("setup entered");
             let handle = app.handle();
             let recents = commands::load_recents(handle);
+            t("recents loaded");
             app.set_menu(menu::build(handle, &recents)?)?;
+            t("menu set");
             menu::attach_handler(handle);
+            // Paint the window in the app's own background BEFORE the webview
+            // has any CSS: it is on screen ~100ms before the frontend paints,
+            // and white-flashing into a dark editor reads as a slow launch.
+            if let Some(w) = app.get_webview_window("main") {
+                window::paint_background(&w);
+            }
+            t("setup done");
             Ok(())
         })
         .build(tauri::generate_context!())

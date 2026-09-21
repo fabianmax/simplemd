@@ -44,6 +44,18 @@ pub fn target(app: &AppHandle) -> Option<WebviewWindow> {
         .find(|w| w.is_focused().unwrap_or(false))
 }
 
+/// The app's own background, so a new window does not flash white before the
+/// frontend has painted. Follows the system theme, like the stylesheet does.
+pub fn paint_background(w: &WebviewWindow) {
+    let dark = matches!(w.theme(), Ok(tauri::Theme::Dark));
+    let color = if dark {
+        tauri::window::Color(0x1e, 0x1e, 0x1e, 0xff)
+    } else {
+        tauri::window::Color(0xff, 0xff, 0xff, 0xff)
+    };
+    let _ = w.set_background_color(Some(color));
+}
+
 /// A tab in flight between windows. It carries the BUFFER, not just the path:
 /// re-reading from disk in the new window would discard unsaved edits, and
 /// losing an edit is the one unacceptable bug class here (CLAUDE.md).
@@ -106,6 +118,7 @@ pub fn new_window(
     // A new window does not reliably raise a Focused event, so claim the focus
     // and record it here: the menu has to route to this window from the moment
     // it opens, not from whenever macOS decides to tell us about it.
+    paint_background(&win);
     let _ = win.set_focus();
     app.state::<LastFocused>().set(&label);
     Ok(label)

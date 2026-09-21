@@ -7,14 +7,8 @@
  *  - rebuilds frozen during drag-selection (capture-phase pointerdown)
  */
 import { EditorState, StateField, StateEffect, type Range } from "@codemirror/state";
-import {
-  Decoration,
-  type DecorationSet,
-  EditorView,
-  ViewPlugin,
-  type ViewUpdate,
-} from "@codemirror/view";
-import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
+import { Decoration, type DecorationSet, EditorView, ViewPlugin } from "@codemirror/view";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { revealedLines, setsEqual } from "./reveal";
 import { TableWidget, CheckboxWidget } from "./widgets";
 
@@ -25,7 +19,13 @@ const fenceLine = Decoration.line({ class: "lp-fence-line" });
 const codeLine = Decoration.line({ class: "lp-code-line" });
 const quoteLine = Decoration.line({ class: "lp-quote-line" });
 
-const PARSE_BUDGET_MS = 5000;
+/** How long the FIRST build may block on parsing. A 25KB plan parses in ~5ms,
+ *  so the common case is unaffected; a 500KB one used to hold the open for
+ *  ~85ms before anything appeared (#9). Past the budget the decorations are
+ *  built from the partial tree and the field rebuilds as the background parse
+ *  advances — CM parses the viewport first, so what the reader is looking at is
+ *  decorated either way. */
+const PARSE_BUDGET_MS = 30;
 
 export function buildDecorations(state: EditorState): DecorationSet {
   const revealed = revealedLines(state);
@@ -152,32 +152,6 @@ const draggingField = StateField.define<boolean>({
     return v;
   },
 });
-/** Forces a rebuild from outside the doc/selection path (see parseWatcher). */
-const rebuildPreview = StateEffect.define<null>();
-
-/** Background parsing finishes in its own transactions, which carry neither a
- *  doc change nor a selection — so a set built from a partial tree would stay
- *  partial until the next keystroke. Watch for the tree completing and ask for
- *  one rebuild. */
-const parseWatcher = ViewPlugin.define((view) => {
-  let complete = syntaxTreeAvailable(view.state, view.state.doc.length);
-  let alive = true;
-  return {
-    update(u: ViewUpdate) {
-      const now = syntaxTreeAvailable(u.state, u.state.doc.length);
-      const grew = now && !complete;
-      complete = now;
-      // Dispatching inside update() is illegal; hop out of the update cycle.
-      if (grew) queueMicrotask(() => {
-        if (alive) view.dispatch({ effects: rebuildPreview.of(null) });
-      });
-    },
-    destroy() {
-      alive = false;
-    },
-  };
-});
-
 const dragFreeze = ViewPlugin.define((view) => {
   const down = () => view.dispatch({ effects: setDragging.of(true) });
   const up = () =>
@@ -271,8 +245,12 @@ export function livePreview() {
       // on the field it just created, against a startState that never had the
       // drag flag. The required form throws there.
       if (tr.startState.field(draggingField, false)) return buildDecorations(tr.state);
-      for (const e of tr.effects) if (e.is(rebuildPreview)) return buildDecorations(tr.state);
       if (tr.docChanged) return buildDecorations(tr.state);
+      // The background parse advances in transactions of its own, carrying
+      // neither a doc change nor a selection. Without this a set built from a
+      // partial tree would stay partial until the next keystroke — the failure
+      // #3 was about. Tree identity is the signal: a new tree, a new build.
+      if (syntaxTree(tr.state) != syntaxTree(tr.startState)) return buildDecorations(tr.state);
       if (tr.selection) {
         // Rebuild only when the revealed-line set actually changed.
         if (setsEqual(revealedLines(tr.startState), revealedLines(tr.state))) {
@@ -284,5 +262,5 @@ export function livePreview() {
     },
     provide: (f) => EditorView.decorations.from(f),
   });
-  return [draggingField, dragFreeze, parseWatcher, field];
+  return [draggingField, dragFreeze, field];
 }

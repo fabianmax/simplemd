@@ -78,6 +78,8 @@ export const resolveLink = (baseDir: string, target: string) =>
   invoke<ResolvedLink>("resolve_link", { baseDir, target });
 export const showFormatMenu = () => invoke<void>("show_format_menu");
 export const log = (msg: string) => invoke<void>("frontend_log", { msg }).catch(() => {});
+/** Timing line; printed only when SIMPLEMD_TRACE is set (see the Rust side). */
+export const trace = (marks: string) => invoke<void>("trace", { marks }).catch(() => {});
 
 export async function pickMarkdownFile(): Promise<string | null> {
   const picked = await openDialog({

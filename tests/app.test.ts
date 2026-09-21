@@ -21,6 +21,7 @@ const ipcStub = vi.hoisted(() => ({
   resolveLink: vi.fn(async () => ({ path: "", exists: false, is_md: false })),
   showFormatMenu: vi.fn(async () => {}),
   log: vi.fn(() => {}),
+  trace: vi.fn(() => {}),
   pickMarkdownFile: vi.fn(async () => null),
   pickSavePath: vi.fn(async () => null),
   pickFolder: vi.fn(async () => null),

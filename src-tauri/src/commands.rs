@@ -90,6 +90,22 @@ pub fn create_file(path: String) -> Result<bool, String> {
     }
 }
 
+/// Process start, so a frontend timing line can be placed against it.
+pub struct Boot(pub std::time::Instant);
+
+/// Timing from the frontend. Silent unless SIMPLEMD_TRACE is set: measuring is
+/// a development activity, and stdout is nobody's UI in a bundled app.
+#[tauri::command]
+pub fn trace(boot: State<Boot>, marks: String) {
+    if std::env::var_os("SIMPLEMD_TRACE").is_none() {
+        return;
+    }
+    println!(
+        "trace: {marks} | +{:.1}ms since process start",
+        boot.0.elapsed().as_secs_f64() * 1000.0
+    );
+}
+
 #[tauri::command]
 pub fn frontend_log(msg: String) {
     eprintln!("[frontend] {msg}");
