@@ -434,6 +434,25 @@ derive from tauri.conf.json, so bump it there first and the rest follow.
   splitting markdown-it + DOMPurify (144KB of a 765KB bundle) buys ~7ms and
   costs asynchronous table rendering.
 
+**Session + residency (2026-09-21)** — issues #10, #11, the other half of #9:
+
+- **The app no longer quits with its last window.** `RunEvent::ExitRequested`
+  carries `code: None` for "user interaction", which covers *both* "the last
+  window closed" and what ⌘Q looks like — so None is always prevented and Quit
+  is our own menu item calling `app.exit(0)`, the programmatic exit the run
+  loop lets through. An AppleScript/Dock quit still terminates normally
+  (verified — an app that cannot be quit from the Dock is worse than a slow
+  one). Reopening into the warm process puts the document on screen ~140ms
+  after the click, against ~530ms cold.
+- With no window left, all three ways in open one: Dock icon (`Reopen`),
+  Launch Services open (otherwise the file lands in a queue nobody reads), and
+  a menu command, which waits in `PendingMenu` for the new window to drain —
+  the same shape as `PendingOpen` and `PendingHandoff`.
+- **Session** (`session.rs`) is paths + which was in front, nothing else. Only
+  the window that last had FOCUS writes it, and an EMPTY report is never
+  written: closing the last tab or window must leave the session intact, or
+  "quit, come back" finds nothing. Restored one window, not N.
+
 Open polish debt: diff visuals — colors, deletion carets and the pill are
 functional but not yet visually resolved.
 
