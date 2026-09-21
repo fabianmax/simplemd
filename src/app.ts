@@ -73,6 +73,7 @@ export class App {
   /** Set for exactly one click: the one a finished drag would otherwise fire. */
   private dragged = false;
   private diffCount: HTMLElement;
+  private sessionTimer: ReturnType<typeof setTimeout> | null = null;
   private diffNav = 0;
 
   constructor(parent: HTMLElement) {
@@ -536,16 +537,49 @@ export class App {
         }
       }),
     ]);
+    // Only the focused window writes the session (the Rust side enforces it),
+    // so a window that regains focus has to claim it back.
+    window.addEventListener("focus", () => this.saveSession());
     // Snapshot the baseline whenever the user looks away from the window.
     window.addEventListener("blur", () => {
       const tab = this.activeTab;
       if (tab && !tab.diff) tab.baseline = this.view.state.doc.toString();
     });
     await this.adoptHandoff(await handoff);
+    await this.restoreSession();
     for (const p of await pending) await this.openPath(p);
     this.applyZoom(loadZoom(), false);
     this.renderChrome();
     await listeners;
+    // A menu command that arrived while no window was open (⌘O from the Dock
+    // app with everything closed) waits for the window it asked for.
+    for (const id of await ipc.takePendingMenu().catch(() => [])) await this.handleMenu(id);
+  }
+
+  /** Reopen the tabs the last window had. Files that have since been deleted or
+   *  renamed are skipped in silence: a restore is not the moment to argue. */
+  private async restoreSession() {
+    const session = await ipc.takeRestore().catch(() => null);
+    if (!session) return;
+    for (const p of session.paths) {
+      try {
+        await this.openPath(p);
+      } catch {
+        /* gone from disk */
+      }
+    }
+    const front = this.tabs.findIndex((t) => t.path === session.active);
+    if (front >= 0) this.switchTo(front);
+  }
+
+  /** Report the open tabs, coalesced: renderChrome runs on every keystroke that
+   *  flips the dirty dot, and this is a disk write on the other side. */
+  private saveSession() {
+    if (this.sessionTimer) clearTimeout(this.sessionTimer);
+    this.sessionTimer = setTimeout(() => {
+      const paths = this.tabs.map((t) => t.path).filter((p): p is string => p !== null);
+      void ipc.setSession(paths, this.activeTab?.path ?? null);
+    }, 400);
   }
 
   private async drainPending() {
@@ -1034,6 +1068,7 @@ export class App {
 
     const title = tab ? `${tab.dirty ? "• " : ""}${fileName(tab.path)} — simplemd` : "simplemd";
     void ipc.setTitle(title);
+    this.saveSession();
   }
 }
 

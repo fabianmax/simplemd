@@ -47,6 +47,16 @@ export interface Handoff {
 export const newWindow = (handoff: Handoff | null = null, at: [number, number] | null = null) =>
   invoke<string>("new_window", { handoff, at });
 export const takeHandoff = () => invoke<Handoff | null>("take_handoff");
+/** Which tabs are open, so the next launch lands where this one left off. */
+export interface Session {
+  paths: string[];
+  active: string | null;
+}
+export const setSession = (paths: string[], active: string | null) =>
+  invoke<void>("set_session", { paths, active });
+export const takeRestore = () => invoke<Session | null>("take_restore");
+/** Menu commands that arrived while no window was open. */
+export const takePendingMenu = () => invoke<string[]>("take_pending_menu");
 export const watchFile = (path: string) => invoke<void>("watch_file", { path });
 export const unwatchFile = (path: string) => invoke<void>("unwatch_file", { path });
 export const writeRecovery = (fileName: string, content: string) =>

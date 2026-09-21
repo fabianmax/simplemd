@@ -1,5 +1,6 @@
 //! Window creation and the tab handoff that makes a tear-off safe.
 
+use crate::session::{PendingRestore, Session};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -93,11 +94,30 @@ pub fn new_window(
     handoff: Option<Handoff>,
     at: Option<(f64, f64)>,
 ) -> Result<String, String> {
+    build(&app, handoff, None, at)
+}
+
+/// A window that comes up holding the last session — what a Dock click, or an
+/// open with no window left, should land in.
+pub fn restored_window(app: &AppHandle, session: Session) -> Result<String, String> {
+    build(app, None, Some(session), None)
+}
+
+fn build(
+    app: &AppHandle,
+    handoff: Option<Handoff>,
+    restore: Option<Session>,
+    at: Option<(f64, f64)>,
+) -> Result<String, String> {
+    let app = app.clone();
     let label = format!("win-{}", NEXT_LABEL.fetch_add(1, Ordering::Relaxed));
     if let Some(h) = handoff {
         // Stored BEFORE the window exists: the frontend drains on startup, so
         // the payload has to be waiting when it asks.
         app.state::<PendingHandoff>().store(&label, h);
+    }
+    if let Some(s) = restore {
+        app.state::<PendingRestore>().store(&label, s);
     }
 
     let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))

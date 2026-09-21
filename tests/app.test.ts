@@ -29,6 +29,9 @@ const ipcStub = vi.hoisted(() => ({
   gitInfo: vi.fn(async () => ({ branch: null as string | null, entries: [] })),
   newWindow: vi.fn(async () => "win-2"),
   takeHandoff: vi.fn(async () => null as null | { path: string | null; text: string; dirty: boolean }),
+  setSession: vi.fn(async () => {}),
+  takeRestore: vi.fn(async () => null as null | { paths: string[]; active: string | null }),
+  takePendingMenu: vi.fn(async () => [] as string[]),
 }));
 vi.mock("../src/ipc", () => ipcStub);
 vi.mock("@tauri-apps/api/webview", () => ({
@@ -131,6 +134,55 @@ describe("window chrome", () => {
 
     expect(app.tabs.map((t) => t.path)).toEqual(["/work/plan.md"]);
     expect(app.view.state.doc.toString()).toBe("# real content\n");
+  });
+
+  it("reopens the tabs the last window had, front tab included (#10)", async () => {
+    // A fresh app, told what was open when the last one went away.
+    ipcStub.takeRestore.mockResolvedValueOnce({
+      paths: ["/work/plan.md", "/work/notes.md"],
+      active: "/work/plan.md",
+    });
+    const restored = new App(document.createElement("div"));
+    await restored.init();
+
+    expect(restored.tabs.map((t) => t.path)).toEqual(["/work/plan.md", "/work/notes.md"]);
+    expect(restored.tabs[restored.active].path).toBe("/work/plan.md");
+  });
+
+  it("skips a restored file that is gone from disk (#10)", async () => {
+    ipcStub.takeRestore.mockResolvedValueOnce({
+      paths: ["/work/gone.md", "/work/notes.md"],
+      active: null,
+    });
+    ipcStub.readFile.mockRejectedValueOnce(new Error("No such file"));
+    const restored = new App(document.createElement("div"));
+    await restored.init();
+
+    expect(restored.tabs.map((t) => t.path)).toEqual(["/work/notes.md"]);
+  });
+
+  it("reports the open tabs, coalesced (#10)", async () => {
+    vi.useFakeTimers();
+    try {
+      await app.openPath("/work/plan.md");
+      await app.openPath("/work/notes.md");
+      expect(ipcStub.setSession).not.toHaveBeenCalled(); // not on every render
+      await vi.advanceTimersByTimeAsync(500);
+      expect(ipcStub.setSession).toHaveBeenCalledTimes(1);
+      expect(ipcStub.setSession).toHaveBeenLastCalledWith(
+        ["/work/plan.md", "/work/notes.md"],
+        "/work/notes.md",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("runs a menu command that was queued while no window was open (#11)", async () => {
+    ipcStub.takePendingMenu.mockResolvedValueOnce(["new-tab"]);
+    const woken = new App(document.createElement("div"));
+    await woken.init();
+    expect(woken.tabs.map((t) => t.path)).toEqual([null]); // ⌘T got its tab
   });
 
   it("tells same-named tabs apart with a folder tail (#8)", async () => {

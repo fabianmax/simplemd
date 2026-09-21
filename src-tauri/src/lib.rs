@@ -1,6 +1,7 @@
 pub mod commands;
 mod git;
 pub mod menu;
+pub mod session;
 pub mod watcher;
 pub mod window;
 
@@ -13,9 +14,28 @@ use tauri::{Emitter, Manager, RunEvent};
 /// so a file is never opened twice.
 pub struct PendingOpen(pub Mutex<Vec<String>>);
 
+/// Menu commands that arrived with no window to act on (the app stays running
+/// without windows — see the ExitRequested handler). The window opened to serve
+/// them drains this the way it drains PendingOpen.
+#[derive(Default)]
+pub struct PendingMenu(pub Mutex<Vec<String>>);
+
 #[tauri::command]
 fn take_pending_open(state: tauri::State<PendingOpen>) -> Vec<String> {
     std::mem::take(&mut *state.0.lock().unwrap())
+}
+
+#[tauri::command]
+fn take_pending_menu(state: tauri::State<PendingMenu>) -> Vec<String> {
+    std::mem::take(&mut *state.0.lock().unwrap())
+}
+
+/// Open a window holding the last session — the answer to a Dock click, a
+/// Finder open, or a menu command that arrives with every window closed.
+pub fn wake_window(app: &tauri::AppHandle) {
+    if app.webview_windows().is_empty() {
+        let _ = window::restored_window(app, session::load(app));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,11 +47,14 @@ pub fn run() {
         .filter(|a| !a.starts_with('-'))
         .collect();
 
+    let initial_empty = initial.is_empty();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(PendingOpen(Mutex::new(initial)))
         .manage(commands::Boot(boot))
+        .manage(session::PendingRestore::default())
+        .manage(PendingMenu::default())
         .manage(commands::ActiveWatch(Mutex::new(std::collections::HashMap::new())))
         .manage(window::PendingHandoff::default())
         .manage(window::LastFocused::default())
@@ -62,6 +85,9 @@ pub fn run() {
             menu::show_format_menu,
             commands::frontend_log,
             commands::trace,
+            session::set_session,
+            session::take_restore,
+            take_pending_menu,
             commands::watch_file,
             commands::unwatch_file,
             commands::write_recovery,
@@ -92,6 +118,14 @@ pub fn run() {
             };
             t("setup entered");
             let handle = app.handle();
+            // A launch with files named on the command line is about those
+            // files; a bare launch picks up where the last one left off.
+            if initial_empty {
+                let saved = session::load(handle);
+                if !saved.is_empty() {
+                    app.state::<session::PendingRestore>().store("main", saved);
+                }
+            }
             let recents = commands::load_recents(handle);
             t("recents loaded");
             app.set_menu(menu::build(handle, &recents)?)?;
@@ -110,6 +144,22 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(|app, event| {
+        // Closing the last window must not quit: the app parks in the Dock the
+        // way a macOS app does, and the next file opens into a process that is
+        // already warm (two thirds of a cold launch is the shell coming up).
+        // ExitRequested carries code: None for "user interaction", which is
+        // also what ⌘Q would look like — so Quit is our own menu item calling
+        // app.exit(0), and only a Some(code) exit is allowed through.
+        if let RunEvent::ExitRequested { code: None, api, .. } = &event {
+            api.prevent_exit();
+            return;
+        }
+        // Dock icon with no windows open: bring the last session back.
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Reopen { has_visible_windows: false, .. } = &event {
+            wake_window(app);
+            return;
+        }
         // Launch Services document-open (Finder double-click, `open -a`).
         // This is the sandbox-safe open path — see CLAUDE.md.
         #[cfg(target_os = "macos")]
@@ -122,6 +172,11 @@ pub fn run() {
             if !paths.is_empty() {
                 let state = app.state::<PendingOpen>();
                 state.0.lock().unwrap().extend(paths);
+                // No window left to nudge: open one, which drains the queue.
+                if app.webview_windows().is_empty() {
+                    let _ = window::restored_window(app, session::Session::default());
+                    return;
+                }
                 // Nudge the focused window; it drains the pending queue. Sent
                 // to one window so which window a Finder open lands in is
                 // deterministic — a broadcast would race every open window.
