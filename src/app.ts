@@ -81,7 +81,11 @@ export class App {
     const mainRow = document.createElement("div");
     mainRow.className = "main-row";
     parent.appendChild(mainRow);
-    this.browser = new BrowserPanel(mainRow, (path) => void this.openAnyPath(path));
+    this.browser = new BrowserPanel(
+      mainRow,
+      (path) => void this.openAnyPath(path),
+      (dir) => void this.newFile(dir),
+    );
     const column = document.createElement("div");
     column.className = "editor-column";
     mainRow.appendChild(column);
@@ -546,6 +550,8 @@ export class App {
       await ipc.newWindow();
     } else if (id === "new-tab") {
       this.newUntitledTab();
+    } else if (id === "new-file") {
+      await this.newFile();
     } else if (id === "save") {
       await this.save();
     } else if (id === "close-tab") {
@@ -578,6 +584,29 @@ export class App {
   }
 
   // --- tabs ---------------------------------------------------------------------
+
+  /** Create a file on disk and open it (#7). An existing file is opened, never
+   *  replaced — the save panel offers "Replace" for a name that exists, and
+   *  replacing here would mean deleting a document to make an empty one. */
+  async newFile(dir: string | null = this.activeDir()) {
+    const picked = await ipc.pickSavePath(dir ? `${dir}/Untitled.md` : undefined);
+    if (!picked) return;
+    const path = /\.(md|markdown)$/i.test(picked) ? picked : `${picked}.md`;
+    try {
+      await ipc.createFile(path);
+    } catch (e) {
+      void ipc.log(`create failed: ${String(e)}`);
+      return;
+    }
+    await this.openPath(path);
+    this.browser.insertFile(path);
+  }
+
+  /** Directory of the active file — where a new file belongs by default. */
+  private activeDir(): string | null {
+    const p = this.activeTab?.path;
+    return p ? p.replace(/\/[^/]+$/, "") : this.browser.rootDir;
+  }
 
   newUntitledTab() {
     this.tabs.push({

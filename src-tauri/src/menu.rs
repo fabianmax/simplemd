@@ -39,6 +39,12 @@ pub fn build(app: &AppHandle, recents: &[String]) -> tauri::Result<Menu<Wry>> {
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&MenuItemBuilder::new("New Window").id("new-window").accelerator("CmdOrCtrl+N").build(app)?)
         .item(&MenuItemBuilder::new("New Tab").id("new-tab").accelerator("CmdOrCtrl+T").build(app)?)
+        .item(
+            &MenuItemBuilder::new("New File…")
+                .id("new-file")
+                .accelerator("CmdOrCtrl+Shift+N")
+                .build(app)?,
+        )
         .item(&MenuItemBuilder::new("Open…").id("open").accelerator("CmdOrCtrl+O").build(app)?)
         .item(&recent)
         .separator()

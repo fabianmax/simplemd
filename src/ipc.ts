@@ -14,6 +14,9 @@ export interface FileContent {
 export const readFile = (path: string) => invoke<FileContent>("read_file", { path });
 export const saveFile = (path: string, content: string) =>
   invoke<string>("save_file", { path, content });
+/** True when the file was created, false when one was already there (which is
+ *  left untouched — see the Rust side). */
+export const createFile = (path: string) => invoke<boolean>("create_file", { path });
 export const addRecent = (path: string) => invoke<void>("add_recent", { path });
 export const getRecents = () => invoke<string[]>("get_recents");
 export interface DirEntry {
@@ -84,9 +87,9 @@ export async function pickMarkdownFile(): Promise<string | null> {
   return typeof picked === "string" ? picked : null;
 }
 
-export async function pickSavePath(): Promise<string | null> {
+export async function pickSavePath(defaultPath = "Untitled.md"): Promise<string | null> {
   const picked = await saveDialog({
-    defaultPath: "Untitled.md",
+    defaultPath,
     filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
   });
   return picked ?? null;

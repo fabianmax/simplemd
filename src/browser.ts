@@ -51,6 +51,7 @@ export class BrowserPanel {
   constructor(
     parent: HTMLElement,
     private onOpen: (path: string) => void,
+    private onNewFile: (dir: string) => void = () => {},
   ) {
     this.root = document.createElement("div");
     this.root.className = "browser";
@@ -77,6 +78,11 @@ export class BrowserPanel {
 
   get width() {
     return this.widthPx;
+  }
+
+  /** Directory the browser is rooted at, or null before it has one. */
+  get rootDir(): string | null {
+    return this.rootPath;
   }
 
   setWidth(px: number) {
@@ -137,6 +143,11 @@ export class BrowserPanel {
     const name = document.createElement("span");
     name.textContent = path.split("/").pop() || path;
     name.title = path;
+    const add = document.createElement("button");
+    add.textContent = "+";
+    add.title = "New file here (\u21e7\u2318N)";
+    add.setAttribute("aria-label", "New file here");
+    add.onclick = () => this.onNewFile(this.rootPath ?? path);
     const pick = document.createElement("button");
     pick.textContent = "…";
     pick.title = "Choose folder";
@@ -144,7 +155,7 @@ export class BrowserPanel {
       const p = await ipc.pickFolder();
       if (p) void this.setRoot(p);
     };
-    this.header.append(up, name, pick);
+    this.header.append(up, name, add, pick);
     this.tree.replaceChildren(await this.renderLevel(path, 0));
   }
 
@@ -164,6 +175,28 @@ export class BrowserPanel {
     };
     d.append(line, pick);
     return d;
+  }
+
+  /** Show a just-created file without re-reading the tree: a full refresh would
+   *  collapse whatever the reader had expanded. Silently does nothing when that
+   *  directory is not on screen — then there is nothing to keep in sync. */
+  insertFile(path: string) {
+    const dir = path.replace(/\/[^/]+$/, "");
+    const level = this.levels.get(dir);
+    if (!level) return;
+    const name = path.split("/").pop() ?? path;
+    if (level.querySelector(`.browser-row[data-path="${CSS.escape(path)}"]`)) return;
+    const row = this.row({ name, path, is_dir: false });
+    row.onclick = () => this.onOpen(path);
+    // Same order list_dir returns: directories first, then case-insensitive.
+    const after = [...level.children].find(
+      (el) =>
+        el instanceof HTMLElement &&
+        el.classList.contains("browser-row") &&
+        !el.classList.contains("browser-dir") &&
+        sortsAfter(el.querySelector(".browser-name")?.textContent ?? "", name),
+    );
+    level.insertBefore(row, after ?? null);
   }
 
   /** Re-reads git state for the levels currently on screen (after a save, or an
@@ -237,6 +270,11 @@ export class BrowserPanel {
     }
     return box;
   }
+}
+
+/** Does `existing` sort after `added`? The comparator list_dir uses. */
+export function sortsAfter(existing: string, added: string): boolean {
+  return existing.toLowerCase() > added.toLowerCase();
 }
 
 // --- git markers ----------------------------------------------------------------

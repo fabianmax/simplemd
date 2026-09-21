@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const ipcStub = vi.hoisted(() => ({
   readFile: vi.fn(async () => ({ content: "# doc\n", hash: "h1" })),
   saveFile: vi.fn(async () => "h1"),
+  createFile: vi.fn(async () => true),
   addRecent: vi.fn(async () => {}),
   getRecents: vi.fn(async () => [] as string[]),
   listDir: vi.fn(async () => [] as unknown[]),
@@ -43,6 +44,8 @@ describe("window chrome", () => {
   let app: App;
 
   beforeEach(async () => {
+    // Call counts must not leak between tests; implementations stay.
+    vi.clearAllMocks();
     vi.stubGlobal("localStorage", {
       getItem: () => null,
       setItem: () => {},
@@ -88,6 +91,45 @@ describe("window chrome", () => {
     await app.handleMenu("find-next");
     const sel = app.view.state.selection.main;
     expect(app.view.state.doc.sliceString(sel.from, sel.to)).toBe("# Head");
+  });
+
+  it("creates a file on disk and opens it, seeded with the active folder (#7)", async () => {
+    await app.openPath("/work/simplemd/plan.md");
+    ipcStub.pickSavePath.mockResolvedValueOnce("/work/simplemd/notes.md");
+
+    await app.handleMenu("new-file");
+
+    expect(ipcStub.pickSavePath).toHaveBeenCalledWith("/work/simplemd/Untitled.md");
+    expect(ipcStub.createFile).toHaveBeenCalledWith("/work/simplemd/notes.md");
+    expect(app.tabs.map((t) => t.path)).toEqual([
+      "/work/simplemd/plan.md",
+      "/work/simplemd/notes.md",
+    ]);
+  });
+
+  it("appends .md to a name typed without one (#7)", async () => {
+    ipcStub.pickSavePath.mockResolvedValueOnce("/work/notes");
+    await app.newFile("/work");
+    expect(ipcStub.createFile).toHaveBeenCalledWith("/work/notes.md");
+  });
+
+  it("does nothing when the save panel is cancelled (#7)", async () => {
+    ipcStub.pickSavePath.mockResolvedValueOnce(null);
+    await app.newFile("/work");
+    expect(ipcStub.createFile).not.toHaveBeenCalled();
+    expect(app.tabs).toHaveLength(0);
+  });
+
+  it("still opens the file when it was already there (#7)", async () => {
+    // create_file reports false for an existing file and leaves it alone.
+    ipcStub.pickSavePath.mockResolvedValueOnce("/work/plan.md");
+    ipcStub.createFile.mockResolvedValueOnce(false);
+    ipcStub.readFile.mockResolvedValueOnce({ content: "# real content\n", hash: "h9" });
+
+    await app.newFile("/work");
+
+    expect(app.tabs.map((t) => t.path)).toEqual(["/work/plan.md"]);
+    expect(app.view.state.doc.toString()).toBe("# real content\n");
   });
 
   it("tells same-named tabs apart with a folder tail (#8)", async () => {
