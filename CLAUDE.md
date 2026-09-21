@@ -449,9 +449,13 @@ derive from tauri.conf.json, so bump it there first and the rest follow.
   a menu command, which waits in `PendingMenu` for the new window to drain —
   the same shape as `PendingOpen` and `PendingHandoff`.
 - **Session** (`session.rs`) is paths + which was in front, nothing else. Only
-  the window that last had FOCUS writes it, and an EMPTY report is never
-  written: closing the last tab or window must leave the session intact, or
-  "quit, come back" finds nothing. Restored one window, not N.
+  the window that last had FOCUS writes it. An empty report IS written —
+  closing the last tab is a decision, and a closed tab must not come back
+  (found in use: it did). The case that would wipe the session by accident is
+  a window that never held a tab (⌘N, or one still restoring), and that is
+  filtered in the FRONTEND, the only side that can tell the two apart: a
+  closed window sends nothing at all, so it can never clear anything.
+  Restored one window, not N.
 
 Open polish debt: diff visuals — colors, deletion carets and the pill are
 functional but not yet visually resolved.

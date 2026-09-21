@@ -178,6 +178,35 @@ describe("window chrome", () => {
     }
   });
 
+  it("remembers that the last tab was closed (#10)", async () => {
+    vi.useFakeTimers();
+    try {
+      await app.openPath("/work/plan.md");
+      await vi.advanceTimersByTimeAsync(500);
+      expect(ipcStub.setSession).toHaveBeenLastCalledWith(["/work/plan.md"], "/work/plan.md");
+
+      await app.closeTab(0);
+      await vi.advanceTimersByTimeAsync(500);
+      // A tab the reader closed must not come back on the next launch.
+      expect(ipcStub.setSession).toHaveBeenLastCalledWith([], null);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a window that never held a tab does not wipe the session (#10)", async () => {
+    vi.useFakeTimers();
+    try {
+      const empty = new App(document.createElement("div"));
+      await empty.init(); // ⌘N: no restore, no files
+      empty.renderChrome();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(ipcStub.setSession).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("runs a menu command that was queued while no window was open (#11)", async () => {
     ipcStub.takePendingMenu.mockResolvedValueOnce(["new-tab"]);
     const woken = new App(document.createElement("div"));

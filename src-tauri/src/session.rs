@@ -78,9 +78,11 @@ pub fn save_to(path: &std::path::Path, session: &Session) {
 /// writes: otherwise a background window's reload would overwrite the session
 /// with tabs the reader is not looking at.
 ///
-/// An EMPTY report is never written. Closing the last tab, or the last window,
-/// has to leave the session as it was — otherwise "quit, come back" would find
-/// nothing, which is the whole point of the feature.
+/// An empty report IS written: closing the last tab is a decision, and a tab
+/// the reader closed must not come back. The case that would wipe the session
+/// by accident — a window that never held a tab — is filtered in the frontend,
+/// which is the only side that can tell the two apart (a closed window sends
+/// nothing at all, so it cannot clear anything).
 #[tauri::command]
 pub fn set_session(
     app: AppHandle,
@@ -92,11 +94,10 @@ pub fn set_session(
     if focused.is_some_and(|l| l != window.label()) {
         return;
     }
-    let session = Session { paths, active };
-    if session.is_empty() {
-        return;
+    if std::env::var_os("SIMPLEMD_TRACE").is_some() {
+        println!("trace: session {} tab(s) from {}", paths.len(), window.label());
     }
-    save(&app, &session);
+    save(&app, &Session { paths, active });
 }
 
 /// Tauri injects the calling window, so a window can only take its own.

@@ -74,6 +74,8 @@ export class App {
   private dragged = false;
   private diffCount: HTMLElement;
   private sessionTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Has this window ever held a tab? Until it has, it must not report. */
+  private sessionArmed = false;
   private diffNav = 0;
 
   constructor(parent: HTMLElement) {
@@ -561,6 +563,9 @@ export class App {
   private async restoreSession() {
     const session = await ipc.takeRestore().catch(() => null);
     if (!session) return;
+    // Even if every file turns out to be gone, this window owns the session
+    // now: reporting the empty result clears paths that no longer exist.
+    this.sessionArmed = true;
     for (const p of session.paths) {
       try {
         await this.openPath(p);
@@ -573,8 +578,15 @@ export class App {
   }
 
   /** Report the open tabs, coalesced: renderChrome runs on every keystroke that
-   *  flips the dirty dot, and this is a disk write on the other side. */
+   *  flips the dirty dot, and this is a disk write on the other side.
+   *
+   *  Empty IS reported once this window has held a tab — closing the last tab
+   *  is a decision, and a tab the reader closed must not come back. Before
+   *  that it is not: a window that never held a tab (⌘N, or one still
+   *  restoring) would otherwise wipe the session it was about to be given. */
   private saveSession() {
+    if (this.tabs.length > 0) this.sessionArmed = true;
+    if (!this.sessionArmed) return;
     if (this.sessionTimer) clearTimeout(this.sessionTimer);
     this.sessionTimer = setTimeout(() => {
       const paths = this.tabs.map((t) => t.path).filter((p): p is string => p !== null);
