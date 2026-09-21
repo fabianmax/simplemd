@@ -401,6 +401,39 @@ derive from tauri.conf.json, so bump it there first and the rest follow.
   case-sensitive), and no replace: bulk-rewriting an agent's plan is not the
   job of this window.
 
+**Usage round 2 (2026-09-21)** — issues #7-#9:
+
+- **New file** (#7): File ▸ New File… (⌘⇧N) and a `+` in the browser header.
+  `create_file` uses `create_new`, so an existing file is opened, never
+  truncated — the save panel's "Replace" would otherwise mean deleting a
+  document to make an empty one. The browser slots the new row into the level
+  it already has on screen; a refresh would collapse what the reader expanded.
+- **Same-named tabs** (#8): `tabname.ts` gives colliding tabs the shortest
+  directory tail that tells them apart (`docs`, then `simplemd/docs`), in
+  smaller dimmer type. A unique name stays undecorated.
+- **Speed** (#9) — and the ruler that came with it. `SIMPLEMD_TRACE=1` makes
+  the Rust side stamp setup and page-load and the frontend flush one line per
+  startup and per open. **Measure before touching anything here.**
+
+  Release build, median of 6, process start -> document on screen: 25KB plan
+  **549 -> 532ms**, 500KB plan **628 -> 537ms**. Where a 25KB startup goes:
+  258ms process/dyld/context (not ours), 9ms recents+menu, ~210ms window +
+  webview + page load (Tauri/WebKit), ~35ms bundle parse, ~55ms our JS. Two
+  thirds of launch is the shell coming up; the JS half is the only part worth
+  arguing about.
+
+  Fixed: `init()` no longer waits on four IPC round trips before asking for
+  the file; the first decoration build has a 30ms parse budget instead of 5s
+  and the field rebuilds **on syntax-tree identity** as the background parse
+  advances (this replaced #3's parseWatcher plugin). The window is painted in
+  the app's background before the webview has CSS — it is on screen ~100ms
+  before the frontend paints.
+
+  **Rejected with numbers, do not retry blind:** a size-optimized release
+  profile (binary 11.6 -> 5.3MB) made process -> setup *slower*, 258 -> 289ms;
+  splitting markdown-it + DOMPurify (144KB of a 765KB bundle) buys ~7ms and
+  costs asynchronous table rendering.
+
 Open polish debt: diff visuals — colors, deletion carets and the pill are
 functional but not yet visually resolved.
 
