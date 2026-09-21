@@ -25,6 +25,7 @@ import {
   isDrag,
 } from "./tabdrag";
 import { ICON, svgIcon } from "./icons";
+import { tabLabels } from "./tabname";
 import { DEFAULT_ZOOM, loadZoom, saveZoom, stepZoom, zoomKeyDirection, zoomLabel } from "./zoom";
 import { captureAnchor, restoredScrollTop, type Heights } from "./viewport";
 import { openSearchPanel, findNext, findPrevious } from "@codemirror/search";
@@ -925,6 +926,9 @@ export class App {
     this.syncBrowserToggle();
     this.syncPreviewToggle();
 
+    // Same-named tabs (plan.md from three repos) carry the directory tail that
+    // tells them apart; a unique name stays undecorated.
+    const labels = tabLabels(this.tabs.map((t) => t.path));
     this.tabStrip.replaceChildren(
       ...this.tabs.map((t, i) => {
         const el = document.createElement("div");
@@ -933,7 +937,8 @@ export class App {
           (i === this.active ? " tab-active" : "") +
           (t.conflict ? " tab-conflict" : "");
         const name = document.createElement("span");
-        name.textContent = fileName(t.path);
+        name.className = "tab-name";
+        name.textContent = labels[i].name;
         name.title = t.path ?? "Untitled";
         if (t.dirty) {
           const dot = document.createElement("span");
@@ -947,7 +952,14 @@ export class App {
           e.stopPropagation();
           void this.closeTab(i);
         };
-        el.append(name, close);
+        el.append(name);
+        if (labels[i].hint) {
+          const hint = document.createElement("span");
+          hint.className = "tab-hint";
+          hint.textContent = labels[i].hint;
+          el.appendChild(hint);
+        }
+        el.appendChild(close);
         el.onclick = () => {
           // A finished drag is followed by a click; that click must not also
           // switch tabs, or every reorder would change the active tab.

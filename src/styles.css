@@ -261,6 +261,16 @@ html, body, #app {
   border-top-color: var(--accent);
 }
 .tab-conflict { border-top-color: #e5a50a; }
+/* The folder tail behind a colliding name: smaller and thinner, so the strip
+   still scans as a row of file names (#8). */
+.tab-hint {
+  font-size: 11px;
+  opacity: 0.55;
+  margin-left: -2px;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .tab-close {
   border: none;
   background: none;

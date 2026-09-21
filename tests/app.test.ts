@@ -90,6 +90,21 @@ describe("window chrome", () => {
     expect(app.view.state.doc.sliceString(sel.from, sel.to)).toBe("# Head");
   });
 
+  it("tells same-named tabs apart with a folder tail (#8)", async () => {
+    await app.openPath("/work/simplemd/plan.md");
+    await app.openPath("/work/other/plan.md");
+    await app.openPath("/work/simplemd/readme.md");
+
+    const names = [...root.querySelectorAll(".tab .tab-name")].map((e) => e.textContent);
+    expect(names).toEqual(["plan.md", "plan.md", "readme.md"]);
+    const tabs = [...root.querySelectorAll(".tab")];
+    expect(tabs.map((t) => t.querySelector(".tab-hint")?.textContent ?? "")).toEqual([
+      "simplemd",
+      "other",
+      "", // unique name, nothing to disambiguate
+    ]);
+  });
+
   it("anchors the browser toggle to the window, not to the tab strip", () => {
     const btn = browserToggle();
     expect(btn).not.toBeNull();
