@@ -13,7 +13,11 @@ import { revealedLines, setsEqual } from "./reveal";
 import { TableWidget, CheckboxWidget } from "./widgets";
 
 const hideMark = Decoration.mark({ class: "lp-hidden" });
-const linkMark = Decoration.mark({ class: "lp-link" });
+// The title is the discoverability half of #14: hover says what the gesture is.
+const linkMark = Decoration.mark({
+  class: "lp-link",
+  attributes: { title: "\u2318-click to open" },
+});
 const inlineCodeMark = Decoration.mark({ class: "lp-inline-code" });
 const fenceLine = Decoration.line({ class: "lp-fence-line" });
 const codeLine = Decoration.line({ class: "lp-code-line" });

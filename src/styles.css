@@ -584,8 +584,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 .diff-pill:not([hidden]) ~ .zoom-pill { bottom: 38px; }
 
 /* --- link hover affordance (v1.4.2) ------------------------------------------ */
-.lp-link { cursor: pointer; }
-.lp-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+/* A link is only clickable with ⌘ held (#14), so it only LOOKS clickable then —
+   the rest of the time it is text, and the cursor says so. */
+.lp-link { cursor: text; }
+.meta-held .lp-link { cursor: pointer; }
+.meta-held .lp-link:hover { text-decoration: underline; text-underline-offset: 2px; }
 /* --- outline ------------------------------------------------------------------ */
 .toc {
   width: 210px;

@@ -214,6 +214,41 @@ describe("window chrome", () => {
     expect(woken.tabs.map((t) => t.path)).toEqual([null]); // ⌘T got its tab
   });
 
+  it("opens a link on ⌘-click and not on a plain one (#14)", async () => {
+    ipcStub.readFile.mockResolvedValueOnce({
+      content: "see [docs](https://example.com) for more\n",
+      hash: "h1",
+    });
+    await app.openPath("/work/plan.md");
+    const host = root.querySelector<HTMLElement>(".editor-host")!;
+    // Coordinates mean nothing under jsdom; point the hit test at the link.
+    vi.spyOn(app.view, "posAtCoords").mockReturnValue(
+      app.view.state.doc.toString().indexOf("docs") + 1,
+    );
+
+    host.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    expect(ipcStub.openExternal).not.toHaveBeenCalled(); // plain click = cursor
+
+    host.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, button: 0, metaKey: true }),
+    );
+    expect(ipcStub.openExternal).toHaveBeenCalledWith("https://example.com");
+  });
+
+  it("shows links as clickable only while ⌘ is held (#14)", () => {
+    const row = root.querySelector(".main-row")!;
+    expect(row.classList.contains("meta-held")).toBe(false);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Meta" }));
+    expect(row.classList.contains("meta-held")).toBe(true);
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "Meta" }));
+    expect(row.classList.contains("meta-held")).toBe(false);
+
+    // ⌘-tab away with the key down: the class must not stick.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Meta" }));
+    window.dispatchEvent(new Event("blur"));
+    expect(row.classList.contains("meta-held")).toBe(false);
+  });
+
   it("tells same-named tabs apart with a folder tail (#8)", async () => {
     await app.openPath("/work/simplemd/plan.md");
     await app.openPath("/work/other/plan.md");
