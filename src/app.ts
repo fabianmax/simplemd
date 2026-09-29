@@ -192,6 +192,12 @@ export class App {
     window.addEventListener("keydown", (e) => e.key === "Meta" && metaHeld(true));
     window.addEventListener("keyup", (e) => e.key === "Meta" && metaHeld(false));
     window.addEventListener("blur", () => metaHeld(false)); // ⌘-tab away, still held
+    // A ⌘-click inside a rendered table cell: the widget cannot resolve a
+    // relative link against the file's directory, so it asks the app to.
+    editorHost.addEventListener("simplemd-link", (e) => {
+      const url = (e as CustomEvent<string | null>).detail;
+      if (url) void this.openLink(url);
+    });
     document.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       if (editorHost.contains(e.target as Node) && this.activeTab) {

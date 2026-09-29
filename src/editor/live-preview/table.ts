@@ -32,10 +32,16 @@ export function splitRow(line: string): Array<[number, number]> {
   return cells;
 }
 
-/** Document offset of the text in rendered cell (row, col), where row 0 is the
- *  header. `from` is the table node's start. Out-of-range coordinates clamp
- *  rather than fail: the caller is a mouse event, not a parser. */
-export function cellPos(src: string, from: number, row: number, col: number): number {
+/** Document range of the TEXT in rendered cell (row, col), padding excluded —
+ *  row 0 is the header, `from` is the table node's start. Out-of-range
+ *  coordinates clamp rather than fail: the caller is a mouse event, not a
+ *  parser. */
+export function cellRange(
+  src: string,
+  from: number,
+  row: number,
+  col: number,
+): { from: number; to: number } {
   const lines = src.split("\n");
   // Source line 1 is the delimiter row — it renders as nothing, so every body
   // row is one line further down than its rendered index.
@@ -44,9 +50,22 @@ export function cellPos(src: string, from: number, row: number, col: number): nu
   for (let i = 0; i < target; i++) offset += lines[i].length + 1;
   const line = lines[target];
   const cells = splitRow(line);
-  if (!cells.length) return offset;
+  if (!cells.length) return { from: offset, to: offset };
   const [cellStart, cellEnd] = cells[Math.min(col, cells.length - 1)];
-  // Land on the text, not on the padding space after the pipe.
   const text = line.slice(cellStart, cellEnd);
-  return offset + cellStart + (text.length - text.trimStart().length);
+  const lead = text.length - text.trimStart().length;
+  const trail = text.length - text.trimEnd().length;
+  return { from: offset + cellStart + lead, to: offset + cellEnd - trail };
+}
+
+/** Where the text of a cell starts. */
+export function cellPos(src: string, from: number, row: number, col: number): number {
+  return cellRange(src, from, row, col).from;
+}
+
+/** A bare pipe would split the row, so it is escaped on the way into the
+ *  source; one that is already escaped is left alone rather than doubled. A
+ *  newline cannot live in a GFM cell either — pasted ones become spaces. */
+export function escapeCell(text: string): string {
+  return text.replace(/\r?\n/g, " ").replace(/(^|[^\\])\|/g, "$1\\|");
 }
