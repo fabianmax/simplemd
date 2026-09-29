@@ -168,35 +168,36 @@ export class App {
     // Suppress the webview's default context menu everywhere — its "Reload"
     // wipes all tab state (reported as 'reload closes the tab'). Inside the
     // editor, show the native formatting menu instead.
-    // Plain click on a link ALWAYS follows it. Implemented as a capture-phase
-    // mousedown/mouseup pair with a drag threshold — DOM `click` is unreliable
-    // after CM's mousedown handling in WKWebView, and pointer events are not
-    // synthesized for accessibility-driven clicks. A drag (move > 4px) is a
-    // selection, not a follow.
-    let linkCandidate: { url: string; x: number; y: number } | null = null;
+    // ⌘-click follows a link; a plain click is a plain click and puts the
+    // cursor there (#14). A single gesture cannot mean both "edit here" and
+    // "leave the document", and the cursor is the one you make dozens of times
+    // a minute. Capture-phase mousedown, because DOM `click` is unreliable
+    // after CM's own mousedown handling in WKWebView — and with ⌘ held there is
+    // no drag to tell apart from a click, so the old 4px threshold is gone.
     editorHost.addEventListener(
       "mousedown",
       (e) => {
-        linkCandidate = null;
-        if (!this.activeTab || !this.previewOn || e.button !== 0) return;
+        if (!this.activeTab || !this.previewOn || e.button !== 0 || !e.metaKey) return;
         const pos = this.view.posAtCoords({ x: e.clientX, y: e.clientY });
         if (pos == null) return;
         const url = linkUrlAt(this.view.state, pos);
-        if (url) linkCandidate = { url, x: e.clientX, y: e.clientY };
+        if (!url) return;
+        e.preventDefault(); // no cursor move, no selection: this is a follow
+        void this.openLink(url);
       },
       { capture: true },
     );
-    editorHost.addEventListener(
-      "mouseup",
-      (e) => {
-        const c = linkCandidate;
-        linkCandidate = null;
-        if (!c) return;
-        if (Math.hypot(e.clientX - c.x, e.clientY - c.y) > 4) return; // drag = select
-        void this.openLink(c.url);
-      },
-      { capture: true },
-    );
+    // Links only look clickable while the key that clicks them is held.
+    const metaHeld = (held: boolean) => this.mainRow.classList.toggle("meta-held", held);
+    window.addEventListener("keydown", (e) => e.key === "Meta" && metaHeld(true));
+    window.addEventListener("keyup", (e) => e.key === "Meta" && metaHeld(false));
+    window.addEventListener("blur", () => metaHeld(false)); // ⌘-tab away, still held
+    // A ⌘-click inside a rendered table cell: the widget cannot resolve a
+    // relative link against the file's directory, so it asks the app to.
+    editorHost.addEventListener("simplemd-link", (e) => {
+      const url = (e as CustomEvent<string | null>).detail;
+      if (url) void this.openLink(url);
+    });
     document.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       if (editorHost.contains(e.target as Node) && this.activeTab) {

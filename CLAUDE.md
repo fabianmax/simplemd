@@ -457,6 +457,36 @@ derive from tauri.conf.json, so bump it there first and the rest follow.
   closed window sends nothing at all, so it can never clear anything.
   Restored one window, not N.
 
+**Editing batch (2026-09-29)** — issues #13-#15, plan in
+`docs/plans/v2.2-editing-batch.md`:
+
+- **A table cell is edited in place** (#13). Clicking a table no longer flips
+  it to pipe syntax: the clicked cell alone shows its SOURCE and takes the
+  keystrokes, the rest stays rendered — the per-line reveal rule applied one
+  level down. Source rather than rendered HTML because editing HTML back into
+  markdown would re-serialize inline markup, which the core invariant forbids.
+  Three things make it hold: CM's DOM observer drops mutations inside widgets
+  (`readMutation` returns null for a widget tile), so an editable island cannot
+  corrupt the document; `ignoreEvent()` now returns true for *everything* (it
+  used to answer true only for mousedown, meaning CM handled every other event
+  from inside the widget — Tab would have indented the document); and
+  `updateDOM()` leaves the DOM alone while a cell is being edited, or our own
+  write would replace the element the caret lives in and typing would break
+  after one character. The CM selection is never moved into the table — moving
+  it is what reveals the whole table as source.
+- **⌘-click opens a link** (#14); a plain click puts the cursor. Links only
+  look clickable while ⌘ is held (class dropped on window blur, or ⌘-tab would
+  leave them lit), and the decoration carries a title that says so on hover.
+- **Tab** (#15): two spaces — not a tab (CommonMark advances it to a
+  four-column stop and renderers disagree), not four (two is the width of
+  "- "). On a list line it is a LEVEL change, re-indenting to the content
+  offset of the item above at the same level; numbers are never rewritten.
+
+Verifying #13 needed a real click: `System Events`' `click at` cannot reach
+inside a webview (error -25208), so a 20-line Swift helper posting CGEvents is
+what drives the release build. Worth knowing the next time something has to be
+proven in the real window.
+
 Open polish debt: diff visuals — colors, deletion carets and the pill are
 functional but not yet visually resolved.
 

@@ -113,6 +113,15 @@ html, body, #app {
   overflow-wrap: anywhere; /* a long path or URL must not force a scrollbar */
 }
 .lp-table th { background: var(--band); white-space: nowrap; }
+/* The cell being edited shows its SOURCE, so it reads as source: monospace,
+   and a ring that makes clear which cell the keystrokes are going into (#13). */
+.lp-cell-edit {
+  font-family: var(--mono);
+  white-space: pre-wrap;
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
 
 /* --- find popup (@codemirror/search, own panel) --------------------------- */
 /* The panel container is pulled OUT of the editor's flex column so the popup
@@ -584,8 +593,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 .diff-pill:not([hidden]) ~ .zoom-pill { bottom: 38px; }
 
 /* --- link hover affordance (v1.4.2) ------------------------------------------ */
-.lp-link { cursor: pointer; }
-.lp-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+/* A link is only clickable with ⌘ held (#14), so it only LOOKS clickable then —
+   the rest of the time it is text, and the cursor says so. */
+.lp-link { cursor: text; }
+.meta-held .lp-link { cursor: pointer; }
+.meta-held .lp-link:hover { text-decoration: underline; text-underline-offset: 2px; }
 /* --- outline ------------------------------------------------------------------ */
 .toc {
   width: 210px;

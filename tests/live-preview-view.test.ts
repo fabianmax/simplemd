@@ -41,25 +41,87 @@ describe("drag freeze", () => {
 });
 
 
-describe("clicking a rendered table", () => {
-  const doc = "text\n\n| name | note |\n| --- | --- |\n| a | first |\n\ntail\n";
-
-  it("puts the cursor in the clicked cell and reveals the source", () => {
-    const view = mount(doc);
-    const cell = [...view.dom.querySelectorAll("td")].find(
-      (td) => td.textContent === "first",
+describe("editing a table cell in place (#13)", () => {
+  const doc = "text\n\n| name | note |\n| --- | --- |\n| a | **first** |\n\ntail\n";
+  const cellNamed = (view: EditorView, text: string) =>
+    [...view.dom.querySelectorAll<HTMLTableCellElement>("th, td")].find(
+      (c) => c.textContent === text,
     )!;
-    cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    expect(doc.slice(view.state.selection.main.head).startsWith("first")).toBe(true);
-    expect(view.dom.querySelector(".lp-table")).toBeNull(); // now editable source
+  const click = (cell: HTMLElement, init: MouseEventInit = {}) =>
+    cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, ...init }));
+  const type = (cell: HTMLElement, text: string) => {
+    cell.textContent = text;
+    cell.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  it("shows that cell's source and leaves the table rendered", () => {
+    const view = mount(doc);
+    const cell = cellNamed(view, "first"); // rendered: **first** shows as first
+    click(cell);
+
+    expect(cell.textContent).toBe("**first**"); // source, in place
+    expect(cell.getAttribute("contenteditable")).toBeTruthy();
+    expect(view.dom.querySelector(".lp-table")).not.toBeNull(); // still a table
+    // The CM cursor must NOT move into the table, or the reveal predicate
+    // would turn the whole thing back into pipe syntax.
+    expect(view.state.selection.main.from).toBe(0);
     view.destroy();
   });
 
-  it("falls back to the table start when the click misses a cell", () => {
+  it("writes what is typed back into that cell's range", () => {
     const view = mount(doc);
-    const table = view.dom.querySelector(".lp-table")!;
-    table.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    expect(view.state.selection.main.head).toBe(doc.indexOf("| name"));
+    click(cellNamed(view, "first"));
+    const cell = view.dom.querySelector<HTMLElement>(".lp-cell-edit")!;
+    type(cell, "**second**");
+
+    expect(view.state.doc.toString()).toBe(doc.replace("**first**", "**second**"));
+    // Same element, still editing: a re-render here would eat the caret.
+    expect(view.dom.querySelector(".lp-cell-edit")).toBe(cell);
+    view.destroy();
+  });
+
+  it("escapes a typed pipe instead of splitting the row", () => {
+    const view = mount(doc);
+    click(cellNamed(view, "a"));
+    type(view.dom.querySelector<HTMLElement>(".lp-cell-edit")!, "x | y");
+    expect(view.state.doc.toString()).toContain("| x \\| y |");
+    view.destroy();
+  });
+
+  it("only one cell is in source at a time", () => {
+    const view = mount(doc);
+    click(cellNamed(view, "a"));
+    click(cellNamed(view, "note"));
+    expect(view.dom.querySelectorAll(".lp-cell-edit").length).toBe(1);
+    view.destroy();
+  });
+
+  it("Tab moves to the next cell, Escape hands the editor back", () => {
+    const view = mount(doc);
+    click(cellNamed(view, "name"));
+    const first = view.dom.querySelector<HTMLElement>(".lp-cell-edit")!;
+    first.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    const second = view.dom.querySelector<HTMLElement>(".lp-cell-edit")!;
+    expect(second).not.toBe(first);
+    expect(second.textContent).toBe("note");
+
+    second.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(view.dom.querySelector(".lp-cell-edit")).toBeNull();
+    view.destroy();
+  });
+
+  it("⌘-click on a link inside a cell asks the app to open it (#14)", () => {
+    const linky = "| a |\n|---|\n| [docs](https://example.com) |\n";
+    const view = mount("text\n\n" + linky);
+    const seen: string[] = [];
+    view.dom.addEventListener("simplemd-link", (e) =>
+      seen.push((e as CustomEvent<string>).detail),
+    );
+    const link = view.dom.querySelector<HTMLElement>(".lp-table a")!;
+    link.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, metaKey: true }));
+
+    expect(seen).toEqual(["https://example.com"]);
+    expect(view.dom.querySelector(".lp-cell-edit")).toBeNull(); // not an edit
     view.destroy();
   });
 });
