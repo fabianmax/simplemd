@@ -7,6 +7,7 @@ import { search, searchKeymap } from "@codemirror/search";
 import { findPanel } from "../find-ui";
 import { keymap } from "@codemirror/view";
 import { livePreview } from "./live-preview/decorations";
+import { indentSpec } from "./indent";
 import { diffField } from "./diff-decorations";
 import { markdownHighlight } from "./highlight";
 
@@ -45,6 +46,14 @@ export function createEditorState(
       // ⌘F/⌘G are also native menu items, and AppKit eats a matched equivalent
       // before the webview sees it — these bindings are what serves the panel
       // itself (Escape to close, Enter to step).
+      // Tab before the defaults: it is a level change on a list line and an
+      // indent everywhere else (#15). CM6 leaves Tab unbound because it takes
+      // the key from focus navigation — accepted here, every other surface in
+      // the window has a ⌘ shortcut.
+      keymap.of([
+        { key: "Tab", run: (v) => (v.dispatch(indentSpec(v.state, 1)), true) },
+        { key: "Shift-Tab", run: (v) => (v.dispatch(indentSpec(v.state, -1)), true) },
+      ]),
       keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
       previewCompartment.of(preview ? previewExtension() : []),
