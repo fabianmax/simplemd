@@ -601,15 +601,22 @@ body.resizing { cursor: col-resize; user-select: none; }
 .lp-table a {
   cursor: text;
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  /* The accent, not currentColor: the link's blue comes from the highlighter
+     on spans INSIDE this mark, so currentColor here is the line's text colour
+     and the underline came out grey. */
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 .lp-table a { color: var(--accent); }
-.meta-held .lp-link,
-.meta-held .lp-table a {
+/* …and the loud version is only for the ONE link under the pointer. Lighting
+   up every link in the document when ⌘ goes down says "these are all links",
+   which the quiet underline already says; what the reader needs to know is
+   which one the click will follow. */
+.meta-held .lp-link:hover,
+.meta-held .lp-table a:hover {
   cursor: pointer;
-  text-decoration-color: currentColor;
+  text-decoration-color: var(--accent);
   text-decoration-thickness: 2px;
 }
 
