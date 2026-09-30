@@ -141,6 +141,24 @@ describe("byte-identity invariant (THE standing test)", () => {
   });
 });
 
+describe("what reads as a link", () => {
+  it("marks a bare URL — GFM autolinks it, and it used to look like prose", () => {
+    const doc = "see https://example.com/plan for more";
+    expect(decosIn(stateAt(doc, doc.length), 4, 29)).toContain("lp-link");
+  });
+  it("marks an inline link and an angle autolink", () => {
+    const inline = "see [docs](https://example.com) here";
+    expect(decosIn(stateAt(inline, inline.length), 4, 31)).toContain("lp-link");
+    const angle = "see <https://example.com> here";
+    expect(decosIn(stateAt(angle, angle.length), 4, 25)).toContain("lp-link");
+  });
+  it("does not mark the URL inside a link twice", () => {
+    const doc = "see [docs](https://example.com) here";
+    const marks = decosIn(stateAt(doc, doc.length), 4, 31).filter((c) => c === "lp-link");
+    expect(marks).toHaveLength(1);
+  });
+});
+
 describe("linkUrlAt (click-to-follow resolution)", async () => {
   const { linkUrlAt } = await import("../src/editor/live-preview/decorations");
   const doc = "A [web link](https://example.com) and <https://auto.link> here.";

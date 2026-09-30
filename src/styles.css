@@ -593,11 +593,58 @@ body.resizing { cursor: col-resize; user-select: none; }
 .diff-pill:not([hidden]) ~ .zoom-pill { bottom: 38px; }
 
 /* --- link hover affordance (v1.4.2) ------------------------------------------ */
-/* A link is only clickable with ⌘ held (#14), so it only LOOKS clickable then —
-   the rest of the time it is text, and the cursor says so. */
-.lp-link { cursor: text; }
-.meta-held .lp-link { cursor: pointer; }
-.meta-held .lp-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+/* A link has to read as one before anything is held down — colour alone was
+   missed, especially for bare URLs. So: a quiet underline always, and with ⌘
+   held (the key that follows it) it turns solid and the cursor becomes a
+   pointer. Underline thickness does not affect layout, so nothing shifts. */
+.lp-link,
+.lp-table a {
+  cursor: text;
+  text-decoration: underline;
+  /* The accent, not currentColor: the link's blue comes from the highlighter
+     on spans INSIDE this mark, so currentColor here is the line's text colour
+     and the underline came out grey. */
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.lp-table a { color: var(--accent); }
+/* …and the loud version is only for the ONE link under the pointer. Lighting
+   up every link in the document when ⌘ goes down says "these are all links",
+   which the quiet underline already says; what the reader needs to know is
+   which one the click will follow. */
+.meta-held .lp-link:hover,
+.meta-held .lp-table a:hover {
+  cursor: pointer;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+}
+
+/* The hover hint. The native title attribute took ~1.5s — long enough that it
+   was never seen — so this is CM's tooltip at 120ms, in the app's chrome. */
+.cm-tooltip.cm-tooltip-hover {
+  border: none;
+  background: transparent;
+}
+.cm-link-tip {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  max-width: 70ch;
+  padding: 4px 9px;
+  border-radius: 7px;
+  font: 12px -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.cm-link-tip-key {
+  flex: none;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
 /* --- outline ------------------------------------------------------------------ */
 .toc {
   width: 210px;
