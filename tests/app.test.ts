@@ -233,6 +233,15 @@ describe("window chrome", () => {
       new MouseEvent("mousedown", { bubbles: true, button: 0, metaKey: true }),
     );
     expect(ipcStub.openExternal).toHaveBeenCalledWith("https://example.com");
+
+    // Raw mode too: the URL is sitting there as text and ⌘-click means the
+    // same thing (reported: "links are not opening").
+    ipcStub.openExternal.mockClear();
+    app.togglePreview();
+    host.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, button: 0, metaKey: true }),
+    );
+    expect(ipcStub.openExternal).toHaveBeenCalledWith("https://example.com");
   });
 
   it("shows links as clickable only while ⌘ is held (#14)", () => {

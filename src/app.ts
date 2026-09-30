@@ -177,7 +177,9 @@ export class App {
     editorHost.addEventListener(
       "mousedown",
       (e) => {
-        if (!this.activeTab || !this.previewOn || e.button !== 0 || !e.metaKey) return;
+        // Not gated on preview: in raw mode the URL is sitting there as text
+        // and ⌘-click means the same thing.
+        if (!this.activeTab || e.button !== 0 || !e.metaKey) return;
         const pos = this.view.posAtCoords({ x: e.clientX, y: e.clientY });
         if (pos == null) return;
         const url = linkUrlAt(this.view.state, pos);

@@ -13,11 +13,7 @@ import { revealedLines, setsEqual } from "./reveal";
 import { TableWidget, CheckboxWidget } from "./widgets";
 
 const hideMark = Decoration.mark({ class: "lp-hidden" });
-// The title is the discoverability half of #14: hover says what the gesture is.
-const linkMark = Decoration.mark({
-  class: "lp-link",
-  attributes: { title: "\u2318-click to open" },
-});
+const linkMark = Decoration.mark({ class: "lp-link" });
 const inlineCodeMark = Decoration.mark({ class: "lp-inline-code" });
 const fenceLine = Decoration.line({ class: "lp-fence-line" });
 const codeLine = Decoration.line({ class: "lp-code-line" });
@@ -119,11 +115,22 @@ export function buildDecorations(state: EditorState): DecorationSet {
           }
           return undefined;
         }
-        case "LinkMark":
-        case "URL": {
+        case "LinkMark": {
           const parent = node.node.parent;
           if (parent?.name === "Link" && !lineRevealed(node.from)) {
             deco.push(hideMark.range(node.from, node.to));
+          }
+          return undefined;
+        }
+        case "URL": {
+          const parent = node.node.parent;
+          if (parent?.name === "Link") {
+            if (!lineRevealed(node.from)) deco.push(hideMark.range(node.from, node.to));
+          } else if (parent?.name !== "Autolink") {
+            // A bare URL is a link (GFM autolinks them) and was the one shape
+            // that looked like plain text: no underline, no pointer, no hint —
+            // so nobody knew it could be clicked at all.
+            deco.push(linkMark.range(node.from, node.to));
           }
           return undefined;
         }

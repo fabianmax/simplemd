@@ -8,6 +8,7 @@ import { findPanel } from "../find-ui";
 import { keymap } from "@codemirror/view";
 import { livePreview } from "./live-preview/decorations";
 import { indentSpec } from "./indent";
+import { linkTooltip } from "./link-tooltip";
 import { diffField } from "./diff-decorations";
 import { markdownHighlight } from "./highlight";
 
@@ -56,6 +57,9 @@ export function createEditorState(
       ]),
       keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
+      // In the base, not in the preview compartment: ⌘-click opens a link in
+      // raw mode too, so the hint has to be there as well.
+      linkTooltip(),
       previewCompartment.of(preview ? previewExtension() : []),
       ...extra,
     ],
